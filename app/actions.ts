@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 
 import type { QuestProgressKind, QuestType, RewardRarity } from "@/lib/titan";
 import { getSqliteDatabase } from "@/lib/server/database";
+import {
+  applyQuestProgressOption,
+  toggleDailyBooleanQuest,
+} from "@/lib/server/titan-progress";
 
 function requireString(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -396,5 +400,19 @@ export async function attachRewardToQuestAction(
   });
 
   transaction();
+  revalidatePath("/");
+}
+
+export async function toggleDailyQuestAction(formData: FormData): Promise<void> {
+  const questId = requireString(formData, "quest_id");
+  toggleDailyBooleanQuest(questId);
+  revalidatePath("/");
+}
+
+export async function applyQuestProgressOptionAction(
+  formData: FormData,
+): Promise<void> {
+  const optionId = requireString(formData, "option_id");
+  applyQuestProgressOption(optionId);
   revalidatePath("/");
 }

@@ -19,8 +19,29 @@ Adolescents usually juggle study blocks, movement, sleep routines, and personal 
 - **Framework**: [Next.js](https://nextjs.org/) (App Router)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 - **Animations**: [Framer Motion](https://www.framer.com/motion/)
-- **Persistence**: Local SQLite bootstrap with a schema shaped to stay D1-compatible
+- **Persistence**: SQLite bootstrap for the current MVP, with a writable `TITAN_DB_PATH` required for hosted deployments
 - **Design System**: Custom gamer UI with a high-contrast palette (`#230c0f`, `#1b4965`, `#ee4266`, `#ddd8b8`)
+
+## Local development
+
+```bash
+cd source
+cp .env.example .env.local
+npm install
+npm run db:init
+npm run dev
+```
+
+The default local database path is `./data/titan.local.db`. Override it with `TITAN_DB_PATH` if you want to keep the SQLite file somewhere else.
+
+## Deployment
+
+The current hosted MVP target is a **Node.js host with a persistent volume**. Because TITAN still uses `better-sqlite3`, a hosted environment must provide a writable SQLite path through `TITAN_DB_PATH`.
+
+- **Works now**: Docker/VM/Railway/Render/Fly-style Node deployment with persistent disk
+- **Not ready yet**: Vercel production deployment with writable persistence
+
+See `docs/DEPLOYMENT.md` for the full release flow and environment setup.
 
 ## 🤝 Contributing
 

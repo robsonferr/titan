@@ -19,7 +19,7 @@ export function TitanProgressBar({
   goal,
   unit,
 }: TitanProgressBarProps): React.JSX.Element {
-  const clamped = Math.min(current / goal, 1);
+  const clamped = goal > 0 ? Math.min(current / goal, 1) : 0;
   const percentage = Math.round(clamped * 100);
 
   return (

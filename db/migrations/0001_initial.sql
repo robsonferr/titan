@@ -14,10 +14,11 @@ CREATE TABLE IF NOT EXISTS templates (
 );
 
 CREATE TABLE IF NOT EXISTS daily_logs (
-  date TEXT PRIMARY KEY,
+  date TEXT NOT NULL,
   template_id TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (date, template_id),
   FOREIGN KEY (template_id) REFERENCES templates(id) ON DELETE CASCADE
 );
 
@@ -80,20 +81,22 @@ CREATE TABLE IF NOT EXISTS quest_progress_options (
 
 CREATE TABLE IF NOT EXISTS daily_log_entries (
   date TEXT NOT NULL,
+  template_id TEXT NOT NULL,
   quest_id TEXT NOT NULL,
   completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
   value INTEGER NOT NULL DEFAULT 0 CHECK (value >= 0),
   PRIMARY KEY (date, quest_id),
-  FOREIGN KEY (date) REFERENCES daily_logs(date) ON DELETE CASCADE,
+  FOREIGN KEY (date, template_id) REFERENCES daily_logs(date, template_id) ON DELETE CASCADE,
   FOREIGN KEY (quest_id) REFERENCES quests(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS daily_option_uses (
   date TEXT NOT NULL,
+  template_id TEXT NOT NULL,
   option_id TEXT NOT NULL,
   uses_count INTEGER NOT NULL DEFAULT 0 CHECK (uses_count >= 0),
   PRIMARY KEY (date, option_id),
-  FOREIGN KEY (date) REFERENCES daily_logs(date) ON DELETE CASCADE,
+  FOREIGN KEY (date, template_id) REFERENCES daily_logs(date, template_id) ON DELETE CASCADE,
   FOREIGN KEY (option_id) REFERENCES quest_progress_options(id) ON DELETE CASCADE
 );
 
@@ -119,3 +122,9 @@ CREATE INDEX IF NOT EXISTS idx_quest_progress_options_order
 
 CREATE INDEX IF NOT EXISTS idx_daily_log_entries_quest
   ON daily_log_entries(quest_id, date);
+
+CREATE INDEX IF NOT EXISTS idx_daily_logs_template_date
+  ON daily_logs(template_id, date);
+
+CREATE INDEX IF NOT EXISTS idx_daily_log_entries_template_date
+  ON daily_log_entries(template_id, date);

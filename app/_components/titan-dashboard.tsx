@@ -2,8 +2,10 @@
 
 import { motion, type Variants } from "framer-motion";
 
+import { TitanEmptyPanel } from "@/app/_components/titan-empty-panel";
 import { MonthlyBossWidget } from "@/app/_components/monthly-boss-widget";
 import { TitanProgressBar } from "@/app/_components/titan-progress-bar";
+import { TitanSubmitButton } from "@/app/_components/titan-submit-button";
 import type { DashboardSnapshot, Quest, Reward } from "@/lib/titan";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
@@ -53,10 +55,25 @@ const navItems = [
 
 interface TitanDashboardProps {
   snapshot: DashboardSnapshot;
+  onToggleDailyQuest: (formData: FormData) => Promise<void>;
+  onApplyQuestProgressOption: (formData: FormData) => Promise<void>;
   children?: React.ReactNode;
 }
 
-function QuestCard({ quest }: { quest: Quest }): React.JSX.Element {
+function QuestCard({
+  quest,
+  onToggleDailyQuest,
+  featuredQuestId,
+}: {
+  quest: Quest;
+  onToggleDailyQuest?: (formData: FormData) => Promise<void>;
+  featuredQuestId?: string | null;
+}): React.JSX.Element {
+  const isBooleanDailyQuest =
+    quest.type === "daily" && quest.progressKind === "boolean";
+  const isCounterDailyQuest =
+    quest.type === "daily" && quest.progressKind === "counter";
+
   return (
     <motion.article
       variants={itemVariants}
@@ -98,15 +115,34 @@ function QuestCard({ quest }: { quest: Quest }): React.JSX.Element {
         </div>
       </div>
 
-      <motion.button
-        whileTap={{ scale: 0.98 }}
-        className={`neo-button mt-5 flex w-full items-center justify-center rounded-full px-4 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#fff7de] ${
-          quest.completed ? "opacity-70" : ""
-        }`}
-        type="button"
-      >
-        {quest.completed ? "Quest cleared" : "Open quest"}
-      </motion.button>
+      {isBooleanDailyQuest && onToggleDailyQuest ? (
+        <form action={onToggleDailyQuest} className="mt-5">
+          <input type="hidden" name="quest_id" value={quest.id} />
+          <TitanSubmitButton
+            idleLabel={quest.completed ? "Undo check" : "Mark done"}
+            pendingLabel="Syncing quest..."
+            className={`neo-button flex w-full items-center justify-center rounded-full px-4 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#fff7de] ${
+              quest.completed ? "opacity-70" : ""
+            }`}
+          />
+        </form>
+      ) : isCounterDailyQuest ? (
+        <div className="mt-5 rounded-full border border-white/10 bg-white/6 px-4 py-3 text-center text-xs font-semibold uppercase tracking-[0.22em] text-[var(--titan-muted)]">
+          {featuredQuestId === quest.id
+            ? "Use the quick-add deck above"
+            : "Add quick options in Forge"}
+        </div>
+      ) : (
+        <motion.button
+          whileTap={{ scale: 0.98 }}
+          className={`neo-button mt-5 flex w-full items-center justify-center rounded-full px-4 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#fff7de] ${
+            quest.completed ? "opacity-70" : ""
+          }`}
+          type="button"
+        >
+          {quest.completed ? "Quest cleared" : "Open quest"}
+        </motion.button>
+      )}
     </motion.article>
   );
 }
@@ -180,13 +216,20 @@ function SectionHeader({
 
 export function TitanDashboard({
   snapshot,
+  onToggleDailyQuest,
+  onApplyQuestProgressOption,
   children,
 }: TitanDashboardProps): React.JSX.Element {
   const bossPercent = Math.round(snapshot.monthlyBoss.engagementScore * 100);
   const coreProgressLabel = `${snapshot.dailyLog.completedCoreQuests}/${snapshot.dailyLog.totalCoreQuests}`;
+  const featuredQuestId = snapshot.featuredGoal?.questId ?? null;
+  const hasSecondaryQuests =
+    snapshot.weeklyQuests.length > 0 ||
+    snapshot.monthlyQuests.length > 0 ||
+    snapshot.epicQuests.length > 0;
 
   return (
-    <main className="safe-bottom relative mx-auto flex min-h-screen w-full max-w-md flex-col px-4 py-6 sm:max-w-2xl sm:px-6">
+    <main className="safe-bottom relative mx-auto flex min-h-screen w-full max-w-md flex-col px-4 py-6 sm:max-w-2xl sm:px-6 lg:max-w-6xl">
       <motion.div
         variants={containerVariants}
         initial="hidden"
@@ -199,7 +242,7 @@ export function TitanDashboard({
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="section-kicker">Phase 3 // Management forge</p>
+              <p className="section-kicker">Phase 4 // Live daily loop</p>
               <h1 className="score-text mt-3 text-[clamp(2.4rem,8vw,4rem)] leading-none text-[#fff7de]">
                 TITAN
               </h1>
@@ -261,24 +304,50 @@ export function TitanDashboard({
               goal={snapshot.featuredGoal.goal}
               unit={snapshot.featuredGoal.unit}
             />
-            <div className="mt-3 grid grid-cols-3 gap-3">
-              {snapshot.featuredGoal.options.map((option) => (
-                <div
-                  key={option.id}
-                  className="panel rounded-[22px] p-3 text-center"
-                >
-                  <p className="section-kicker">{option.label}</p>
-                  <p className="score-text mt-2 text-2xl text-[#fff7de]">
-                    +{option.value}
-                  </p>
-                  <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[var(--titan-muted)]">
-                    x{option.usesToday} today
-                  </p>
-                </div>
-              ))}
-            </div>
+            {snapshot.featuredGoal.options.length > 0 ? (
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {snapshot.featuredGoal.options.map((option) => (
+                  <form key={option.id} action={onApplyQuestProgressOption}>
+                    <input type="hidden" name="option_id" value={option.id} />
+                    <TitanSubmitButton
+                      pendingLabel="Adding burst..."
+                      className="panel w-full rounded-[22px] p-3 text-center text-sm font-semibold text-[#fff7de] transition-transform hover:-translate-y-0.5"
+                    >
+                      <p className="section-kicker">{option.label}</p>
+                      <p className="score-text mt-2 text-2xl text-[#fff7de]">
+                        +{option.value}
+                      </p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[var(--titan-muted)]">
+                        x{option.usesToday} today
+                      </p>
+                      <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#fff7de]">
+                        Add burst
+                      </p>
+                    </TitanSubmitButton>
+                  </form>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3">
+                <TitanEmptyPanel
+                  kicker="Featured Goal"
+                  title="No burst buttons yet"
+                  description="This counter quest is live, but it still needs quick-add presets before the player can stack progress from the dashboard."
+                  hint="Forge quick-add options in the management deck."
+                />
+              </div>
+            )}
           </motion.section>
-        ) : null}
+        ) : (
+          <motion.section variants={itemVariants}>
+            <TitanEmptyPanel
+              kicker="Featured Goal"
+              title="No counter quest equipped"
+              description="Add a daily counter quest with a target value to light up the featured progress bar and its burst buttons."
+              hint="Good fit: Protein Log or any preset-based tracker."
+            />
+          </motion.section>
+        )}
 
         <motion.section variants={itemVariants}>
           <SectionHeader
@@ -286,11 +355,25 @@ export function TitanDashboard({
             title="Daily Quests"
             caption={snapshot.activeTemplate.successRuleLabel}
           />
-          <div className="grid gap-4">
-            {snapshot.dailyQuests.map((quest) => (
-              <QuestCard key={quest.id} quest={quest} />
-            ))}
-          </div>
+          {snapshot.dailyQuests.length > 0 ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {snapshot.dailyQuests.map((quest) => (
+                <QuestCard
+                  key={quest.id}
+                  quest={quest}
+                  onToggleDailyQuest={onToggleDailyQuest}
+                  featuredQuestId={featuredQuestId}
+                />
+              ))}
+            </div>
+          ) : (
+            <TitanEmptyPanel
+              kicker="Today run"
+              title="No Daily Quests in this template"
+              description="The active template exists, but the daily loop is still empty. Add Morning Buff, Night Protocol, Protein Log, or other core quests in the Forge."
+              hint="The Boss cannot progress until this deck has daily quests."
+            />
+          )}
         </motion.section>
 
         <motion.section variants={itemVariants}>
@@ -299,15 +382,24 @@ export function TitanDashboard({
             title="Weekly + Monthly + Epic"
             caption="The template still drives the medium and long arcs."
           />
-          <div className="grid gap-4">
-            {[
-              ...snapshot.weeklyQuests,
-              ...snapshot.monthlyQuests,
-              ...snapshot.epicQuests,
-            ].map((quest) => (
-              <QuestCard key={quest.id} quest={quest} />
-            ))}
-          </div>
+          {hasSecondaryQuests ? (
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {[
+                ...snapshot.weeklyQuests,
+                ...snapshot.monthlyQuests,
+                ...snapshot.epicQuests,
+              ].map((quest) => (
+                <QuestCard key={quest.id} quest={quest} />
+              ))}
+            </div>
+          ) : (
+            <TitanEmptyPanel
+              kicker="Secondary lanes"
+              title="No long-arc quests yet"
+              description="Weekly, Monthly Boss, and Epic quests are still empty for this template. The daily loop works, but the broader progression deck has not been forged yet."
+              hint="Add weekly arcs or a Monthly Boss in the management deck."
+            />
+          )}
         </motion.section>
 
         <motion.section variants={itemVariants}>
@@ -316,18 +408,27 @@ export function TitanDashboard({
             title="Shop preview"
             caption="Rewards can stay standalone or attach to quests."
           />
-          <div className="grid gap-4 sm:grid-cols-2">
-            {snapshot.rewards.map((reward) => (
-              <RewardCard key={reward.id} reward={reward} />
-            ))}
-          </div>
+          {snapshot.rewards.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {snapshot.rewards.map((reward) => (
+                <RewardCard key={reward.id} reward={reward} />
+              ))}
+            </div>
+          ) : (
+            <TitanEmptyPanel
+              kicker="Loot room"
+              title="Shop is empty"
+              description="No rewards are stocked yet, so the Shop preview cannot show loot. Add a few XP rewards to make the run feel tangible."
+              hint="Standalone rewards also appear here."
+            />
+          )}
         </motion.section>
 
         {children ? <motion.section variants={itemVariants}>{children}</motion.section> : null}
 
         <motion.nav
           variants={itemVariants}
-          className="panel sticky bottom-3 z-10 mt-2 grid grid-cols-4 rounded-full px-3 py-3"
+          className="panel sticky bottom-3 z-10 mt-2 mx-auto grid w-full max-w-md grid-cols-4 rounded-full px-3 py-3"
         >
           {navItems.map((item) => (
             <button

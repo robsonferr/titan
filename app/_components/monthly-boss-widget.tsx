@@ -21,6 +21,12 @@ export function MonthlyBossWidget({
 }: MonthlyBossWidgetProps): React.JSX.Element {
   const percentage = Math.round(engagementScore * 100);
   const thresholdPercent = Math.round(threshold * 100);
+  const hasTrackedDays = totalDays > 0;
+  const bossStatusLabel = !hasTrackedDays
+    ? "Month booting"
+    : percentage >= thresholdPercent
+      ? "Shield up"
+      : "Recovering";
   const ringStyle = {
     background: `conic-gradient(#ee4266 ${percentage}%, rgba(255,255,255,0.08) ${percentage}% 100%)`,
   };
@@ -58,19 +64,31 @@ export function MonthlyBossWidget({
         </motion.div>
 
         <div className="space-y-3 text-sm text-[var(--titan-muted)]">
-          <p>
-            <span className="font-semibold text-[#fff7de]">{completedDays}</span>{" "}
-            successful days out of{" "}
-            <span className="font-semibold text-[#fff7de]">{totalDays}</span>.
-          </p>
+          {hasTrackedDays ? (
+            <p>
+              <span className="font-semibold text-[#fff7de]">{completedDays}</span>{" "}
+              successful days out of{" "}
+              <span className="font-semibold text-[#fff7de]">{totalDays}</span>.
+            </p>
+          ) : (
+            <p>No cleared days yet. Finish a valid day to wake the Boss meter.</p>
+          )}
           <p>{successRuleLabel}</p>
           <p>
             Threshold is{" "}
             <span className="font-semibold text-[#fff7de]">{thresholdPercent}%</span>{" "}
             to clear this Boss.
           </p>
-          <div className="inline-flex rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[#b4ffd8]">
-            {percentage >= thresholdPercent ? "Shield up" : "Recovering"}
+          <div
+            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${
+              hasTrackedDays
+                ? percentage >= thresholdPercent
+                  ? "border border-emerald-300/20 bg-emerald-300/10 text-[#b4ffd8]"
+                  : "border border-amber-300/20 bg-amber-300/10 text-[#ffd8a8]"
+                : "border border-white/10 bg-white/6 text-[var(--titan-muted)]"
+            }`}
+          >
+            {bossStatusLabel}
           </div>
         </div>
       </div>

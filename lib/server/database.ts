@@ -9,9 +9,17 @@ type SqliteDatabase = InstanceType<typeof BetterSqlite3>;
 
 let database: SqliteDatabase | null = null;
 
+export function requiresTitanProductionPersistenceConfig(): boolean {
+  return process.env.NODE_ENV === "production" && !process.env.TITAN_DB_PATH;
+}
+
 export function getTitanDatabasePath(): string {
-  if (process.env.TITAN_DB_PATH) {
-    return path.resolve(process.env.TITAN_DB_PATH);
+  const customPath = process.env.TITAN_DB_PATH;
+
+  if (customPath) {
+    return path.isAbsolute(customPath)
+      ? customPath
+      : path.join(/* turbopackIgnore: true */ process.cwd(), customPath);
   }
 
   return path.join(/* turbopackIgnore: true */ process.cwd(), "data", "titan.local.db");
@@ -24,6 +32,12 @@ export function titanDatabaseExists(): boolean {
 export function getSqliteDatabase(): SqliteDatabase {
   if (database) {
     return database;
+  }
+
+  if (requiresTitanProductionPersistenceConfig()) {
+    throw new Error(
+      "TITAN_DB_PATH is required in production. Point it to a writable SQLite file on a persistent volume before starting the hosted app.",
+    );
   }
 
   const databasePath = getTitanDatabasePath();

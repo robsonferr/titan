@@ -207,6 +207,7 @@ export interface DailyLogRecord {
 
 export interface DailyLogEntryRecord {
   date: string;
+  template_id: string;
   quest_id: string;
   completed: number;
   value: number;
@@ -228,6 +229,7 @@ export interface QuestProgressOptionRecord {
 
 export interface DailyOptionUseRecord {
   date: string;
+  template_id: string;
   option_id: string;
   uses_count: number;
 }

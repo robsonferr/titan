@@ -35,13 +35,24 @@ import {
 import {
   getSqliteDatabase,
   getTitanDatabasePath,
+  requiresTitanProductionPersistenceConfig,
   titanDatabaseExists,
 } from "@/lib/server/database";
+import { getTodayIsoDate } from "@/lib/server/titan-progress";
 
 type TitanAppState =
   | {
       kind: "missing_database";
       dbPath: string;
+    }
+  | {
+      kind: "empty_database";
+      dbPath: string;
+    }
+  | {
+      kind: "invalid_configuration";
+      envKey: string;
+      exampleValue: string;
     }
   | {
       kind: "ready";
@@ -64,10 +75,6 @@ interface RewardSummaryRow extends RewardRecord {
 
 function toBoolean(value: number): boolean {
   return value === 1;
-}
-
-function getTodayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function formatTodayLabel(date: string): string {
@@ -418,6 +425,14 @@ function queryQuestRecords(templateId: string): QuestRecord[] {
 export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
   const dbPath = getTitanDatabasePath();
 
+  if (requiresTitanProductionPersistenceConfig()) {
+    return {
+      kind: "invalid_configuration",
+      envKey: "TITAN_DB_PATH",
+      exampleValue: "/data/titan/titan.db",
+    };
+  }
+
   if (!titanDatabaseExists()) {
     return {
       kind: "missing_database",
@@ -445,9 +460,10 @@ export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
     .all() as TemplateRecord[];
 
   if (templateRecords.length === 0) {
-    throw new Error(
-      'TITAN database is initialized but contains no templates. Re-run "npm run db:init".',
-    );
+    return {
+      kind: "empty_database",
+      dbPath,
+    };
   }
 
   const activeTemplateRecord =
@@ -458,18 +474,7 @@ export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
     (record) => record.type === "daily" && toBoolean(record.is_core),
   ).length;
   const activeTemplate = mapTemplate(activeTemplateRecord, totalCoreQuests);
-  const latestDailyRecord = database
-    .prepare(
-      `
-        SELECT date, template_id
-        FROM daily_logs
-        WHERE template_id = ?
-        ORDER BY date DESC
-        LIMIT 1
-      `,
-    )
-    .get(activeTemplate.id) as DailyLogRecord | undefined;
-  const activeDate = latestDailyRecord?.date ?? getTodayIsoDate();
+  const activeDate = getTodayIsoDate();
   const currentMonth = activeDate.slice(0, 7);
   const monthlyStatsRecord =
     (database
@@ -491,13 +496,13 @@ export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
   const latestDailyEntries = database
     .prepare(
       `
-        SELECT e.date, e.quest_id, e.completed, e.value
+        SELECT e.date, e.template_id, e.quest_id, e.completed, e.value
         FROM daily_log_entries e
         INNER JOIN quests q ON q.id = e.quest_id
-        WHERE e.date = ? AND q.template_id = ?
+        WHERE e.date = ? AND e.template_id = ? AND q.template_id = ?
       `,
     )
-    .all(activeDate, activeTemplate.id) as DailyLogEntryRecord[];
+    .all(activeDate, activeTemplate.id, activeTemplate.id) as DailyLogEntryRecord[];
   const questProgressRecords = database
     .prepare(
       `
@@ -522,14 +527,14 @@ export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
   const dailyOptionUseRecords = database
     .prepare(
       `
-        SELECT dou.date, dou.option_id, dou.uses_count
+        SELECT dou.date, dou.template_id, dou.option_id, dou.uses_count
         FROM daily_option_uses dou
         INNER JOIN quest_progress_options qpo ON qpo.id = dou.option_id
         INNER JOIN quests q ON q.id = qpo.quest_id
-        WHERE dou.date = ? AND q.template_id = ?
+        WHERE dou.date = ? AND dou.template_id = ? AND q.template_id = ?
       `,
     )
-    .all(activeDate, activeTemplate.id) as DailyOptionUseRecord[];
+    .all(activeDate, activeTemplate.id, activeTemplate.id) as DailyOptionUseRecord[];
   const rewards = (
     database
       .prepare(
@@ -556,20 +561,20 @@ export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
     ? (database
         .prepare(
           `
-            SELECT e.date, e.quest_id, e.completed, e.value
+            SELECT e.date, e.template_id, e.quest_id, e.completed, e.value
             FROM daily_log_entries e
             INNER JOIN quests q ON q.id = e.quest_id
             INNER JOIN (
-              SELECT date
+              SELECT date, template_id
               FROM daily_logs
               WHERE template_id = ?
               ORDER BY date DESC
               LIMIT 31
-            ) recent ON recent.date = e.date
-            WHERE q.template_id = ?
+            ) recent ON recent.date = e.date AND recent.template_id = e.template_id
+            WHERE e.template_id = ? AND q.template_id = ?
           `,
         )
-        .all(activeTemplate.id, activeTemplate.id) as DailyLogEntryRecord[])
+        .all(activeTemplate.id, activeTemplate.id, activeTemplate.id) as DailyLogEntryRecord[])
     : [];
 
   const dailyEntriesByQuestId = buildDailyEntryMap(latestDailyEntries);
