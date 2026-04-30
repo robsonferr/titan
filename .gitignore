@@ -31,6 +31,12 @@ yarn-error.log*
 .env
 .dev.vars
 
+# local sqlite databases (use Cloudflare D1 instead)
+data/*.db
+data/*.db-journal
+data/*.sqlite
+data/*.sqlite3
+
 # vercel
 .vercel
 
