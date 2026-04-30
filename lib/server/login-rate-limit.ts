@@ -9,6 +9,8 @@ import {
 const WINDOW_SECONDS = 15 * 60;
 const MAX_FAILURES = 5;
 const LOCKOUT_SECONDS = 15 * 60;
+const STALE_AFTER_SECONDS = 24 * 60 * 60;
+const GC_PROBABILITY = 0.05;
 
 interface AttemptRow {
   failures: number;
@@ -25,11 +27,33 @@ function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
 
+async function maybeCollectStaleAttempts(
+  database: Awaited<ReturnType<typeof getTitanDatabase>>,
+  now: number,
+): Promise<void> {
+  if (Math.random() > GC_PROBABILITY) {
+    return;
+  }
+
+  try {
+    await executeStatement(
+      "DELETE FROM login_attempts WHERE locked_until <= ? AND window_start < ?",
+      [now, now - STALE_AFTER_SECONDS],
+      database,
+    );
+  } catch (error) {
+    console.error("[titan-auth:gc]", error);
+  }
+}
+
 export async function checkLoginRateLimit(
   ip: string,
 ): Promise<RateLimitDecision> {
   const database = await getTitanDatabase();
   const now = nowSeconds();
+
+  await maybeCollectStaleAttempts(database, now);
+
   const row = await queryFirst<AttemptRow>(
     "SELECT failures, window_start, locked_until FROM login_attempts WHERE ip = ?",
     [ip],

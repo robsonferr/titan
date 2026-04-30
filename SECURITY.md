@@ -2,7 +2,7 @@
 
 ## Reportar uma vulnerabilidade
 
-Envie detalhes para **robson.ferreira@statutories.com**. Por favor, não abra
+Envie detalhes para **robsonferr@gmail.com**. Por favor, não abra
 issues públicas para falhas de segurança. Inclua:
 
 - Passos para reproduzir.
