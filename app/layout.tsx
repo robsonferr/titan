@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { Bungee, Saira } from "next/font/google";
 import "./globals.css";
 
-export const runtime = "nodejs";
-
 const bungee = Bungee({
   variable: "--font-bungee",
   subsets: ["latin"],

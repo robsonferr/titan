@@ -3,12 +3,12 @@ import { TitanShellCard } from "@/app/_components/titan-shell-card";
 import type { ManagementSnapshot } from "@/lib/titan";
 
 interface TitanEmptyDatabaseNoticeProps {
-  dbPath: string;
+  bindingName: string;
   management: ManagementSnapshot;
 }
 
 export function TitanEmptyDatabaseNotice({
-  dbPath,
+  bindingName,
   management,
 }: TitanEmptyDatabaseNoticeProps): React.JSX.Element {
   return (
@@ -31,9 +31,9 @@ export function TitanEmptyDatabaseNotice({
 
           <div className="rounded-[24px] border border-white/10 bg-black/25 p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-[var(--titan-muted)]">
-              Active DB path
+              Active D1 binding
             </p>
-            <p className="mt-2 break-all text-sm text-[#fff7de]">{dbPath}</p>
+            <p className="mt-2 break-all text-sm text-[#fff7de]">{bindingName}</p>
           </div>
         </div>
       </TitanShellCard>

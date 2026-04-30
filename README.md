@@ -19,29 +19,46 @@ Adolescents usually juggle study blocks, movement, sleep routines, and personal 
 - **Framework**: [Next.js](https://nextjs.org/) (App Router)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 - **Animations**: [Framer Motion](https://www.framer.com/motion/)
-- **Persistence**: SQLite bootstrap for the current MVP, with a writable `TITAN_DB_PATH` required for hosted deployments
+- **Runtime / Deploy**: Cloudflare Workers via [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare)
+- **Persistence**: Cloudflare D1 (`TITAN_DB` binding)
 - **Design System**: Custom gamer UI with a high-contrast palette (`#230c0f`, `#1b4965`, `#ee4266`, `#ddd8b8`)
 
 ## Local development
 
 ```bash
 cd source
-cp .env.example .env.local
 npm install
-npm run db:init
+npm run db:setup:local
 npm run dev
 ```
 
-The default local database path is `./data/titan.local.db`. Override it with `TITAN_DB_PATH` if you want to keep the SQLite file somewhere else.
+Use `npm run preview` when you want to validate the app inside the actual Workers runtime instead of the standard Next.js dev server.
+
+## D1 workflow
+
+```bash
+# apply schema + seed to the local D1 database used by wrangler dev / preview
+npm run db:setup:local
+
+# apply schema + seed to the remote Cloudflare D1 database
+npm run db:setup:remote
+```
+
+The Worker expects a `TITAN_DB` D1 binding declared in `wrangler.jsonc`. Regenerate typed bindings after Wrangler config changes with:
+
+```bash
+npm run cf-typegen
+```
 
 ## Deployment
 
-The current hosted MVP target is a **Node.js host with a persistent volume**. Because TITAN still uses `better-sqlite3`, a hosted environment must provide a writable SQLite path through `TITAN_DB_PATH`.
+TITAN now targets **Cloudflare Workers + D1**.
 
-- **Works now**: Docker/VM/Railway/Render/Fly-style Node deployment with persistent disk
-- **Not ready yet**: Vercel production deployment with writable persistence
+```bash
+npm run deploy
+```
 
-See `docs/DEPLOYMENT.md` for the full release flow and environment setup.
+See `docs/DEPLOYMENT.md` for the full D1 migration, binding, and release flow.
 
 ## 🤝 Contributing
 

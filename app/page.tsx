@@ -17,26 +17,31 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const state = await getTitanAppState();
 
-  if (state.kind === "missing_database") {
+  if (state.kind === "missing_schema") {
     return (
       <TitanSetupNotice
-        dbPath={state.dbPath}
-        command={
-          process.env.TITAN_DB_PATH
-            ? `TITAN_DB_PATH=${process.env.TITAN_DB_PATH} npm run db:init`
-            : "npm run db:init"
-        }
+        bindingName={state.bindingName}
+        commands={[
+          {
+            label: "Local D1 bootstrap",
+            command: "npm run db:setup:local",
+          },
+          {
+            label: "Remote D1 bootstrap",
+            command: "npm run db:setup:remote",
+          },
+        ]}
       />
     );
   }
 
-  if (state.kind === "invalid_configuration") {
+  if (state.kind === "missing_binding") {
     return (
       <TitanDeploymentNotice
-        title="Production persistence missing"
-        description="This hosted build uses SQLite, so it needs an explicit writable path on a persistent volume before the shell can boot safely."
-        envKey={state.envKey}
-        exampleValue={state.exampleValue}
+        title="Cloudflare binding missing"
+        description="This Workers build needs the TITAN_DB D1 binding before the dashboard can load real data."
+        bindingName={state.bindingName}
+        configLocation={state.configLocation}
       />
     );
   }
@@ -45,7 +50,10 @@ export default async function Home() {
 
   if (state.kind === "empty_database") {
     return (
-      <TitanEmptyDatabaseNotice dbPath={state.dbPath} management={management} />
+      <TitanEmptyDatabaseNotice
+        bindingName={state.bindingName}
+        management={management}
+      />
     );
   }
 

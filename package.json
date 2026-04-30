@@ -5,12 +5,20 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "npm run preview",
     "lint": "eslint",
-    "db:init": "node scripts/db-init.mjs"
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "db:migrate:local": "wrangler d1 migrations apply TITAN_DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply TITAN_DB --remote",
+    "db:seed:local": "wrangler d1 execute TITAN_DB --local --file db/seeds/0001_seed.sql",
+    "db:seed:remote": "wrangler d1 execute TITAN_DB --remote --file db/seeds/0001_seed.sql",
+    "db:setup:local": "npm run db:migrate:local && npm run db:seed:local",
+    "db:setup:remote": "npm run db:migrate:remote && npm run db:seed:remote"
   },
   "dependencies": {
-    "better-sqlite3": "^12.9.0",
+    "@opennextjs/cloudflare": "^1.19.5",
     "framer-motion": "^12.38.0",
     "next": "16.2.4",
     "react": "19.2.4",
@@ -18,13 +26,13 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.87.0"
   }
 }

@@ -3,7 +3,14 @@
 import { revalidatePath } from "next/cache";
 
 import type { QuestProgressKind, QuestType, RewardRarity } from "@/lib/titan";
-import { getSqliteDatabase } from "@/lib/server/database";
+import {
+  attachRewardToQuestRecord,
+  createQuestProgressOptionRecord,
+  createQuestRecord,
+  createRewardRecord,
+  createTemplateRecord,
+  setActiveTemplateRecord,
+} from "@/lib/server/titan-admin";
 import {
   applyQuestProgressOption,
   toggleDailyBooleanQuest,
@@ -114,265 +121,76 @@ function slugify(value: string): string {
   return slug || "item";
 }
 
-function getNextDisplayOrder(
-  table: "templates" | "quests" | "rewards" | "quest_progress_options",
-  parentKey?: { column: "template_id" | "quest_id"; value: string },
-): number {
-  const database = getSqliteDatabase();
-
-  if (!parentKey) {
-    const row = database
-      .prepare(`SELECT COALESCE(MAX(display_order), 0) AS max_order FROM ${table}`)
-      .get() as { max_order: number };
-
-    return row.max_order + 1;
-  }
-
-  const row = database
-    .prepare(
-      `SELECT COALESCE(MAX(display_order), 0) AS max_order FROM ${table} WHERE ${parentKey.column} = ?`,
-    )
-    .get(parentKey.value) as { max_order: number };
-
-  return row.max_order + 1;
-}
-
-function createUniqueId(
-  table: "templates" | "quests" | "rewards" | "quest_progress_options",
-  base: string,
-): string {
-  const database = getSqliteDatabase();
-  const statement = database.prepare(`SELECT 1 FROM ${table} WHERE id = ? LIMIT 1`);
-  let candidate = base;
-  let suffix = 2;
-
-  while (statement.get(candidate)) {
-    candidate = `${base}-${suffix}`;
-    suffix += 1;
-  }
-
-  return candidate;
-}
-
-function ensureRecordExists(
-  table: "templates" | "quests" | "rewards",
-  id: string,
-): void {
-  const database = getSqliteDatabase();
-  const row = database
-    .prepare(`SELECT 1 FROM ${table} WHERE id = ? LIMIT 1`)
-    .get(id);
-
-  if (!row) {
-    throw new Error(`Missing ${table} record for id ${id}`);
-  }
-}
-
-function getCadenceLabel(type: QuestType): string {
-  switch (type) {
-    case "daily":
-      return "Daily Quest";
-    case "weekly":
-      return "Weekly Quest";
-    case "monthly":
-      return "Monthly Boss";
-    case "epic":
-      return "Epic Quest";
-  }
-}
-
 export async function createTemplateAction(formData: FormData): Promise<void> {
-  const database = getSqliteDatabase();
   const title = requireString(formData, "title");
-  const summary = requireString(formData, "summary");
-  const successTarget = requireInteger(formData, "success_target", 1);
-  const id = createUniqueId("templates", slugify(title));
-  const displayOrder = getNextDisplayOrder("templates");
 
-  database
-    .prepare(
-      `
-        INSERT INTO templates (id, title, summary, success_target, display_order)
-        VALUES (?, ?, ?, ?, ?)
-      `,
-    )
-    .run(id, title, summary, successTarget, displayOrder);
+  await createTemplateRecord({
+    title,
+    summary: requireString(formData, "summary"),
+    successTarget: requireInteger(formData, "success_target", 1),
+    slugBase: slugify(title),
+  });
 
   revalidatePath("/");
 }
 
 export async function setActiveTemplateAction(formData: FormData): Promise<void> {
-  const templateId = requireString(formData, "template_id");
-  const database = getSqliteDatabase();
-
-  ensureRecordExists("templates", templateId);
-
-  database
-    .prepare(
-      `
-        INSERT INTO app_settings (key, value)
-        VALUES ('active_template_id', ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value
-      `,
-    )
-    .run(templateId);
-
+  await setActiveTemplateRecord(requireString(formData, "template_id"));
   revalidatePath("/");
 }
 
 export async function createRewardAction(formData: FormData): Promise<void> {
-  const database = getSqliteDatabase();
   const title = requireString(formData, "title");
-  const description = requireString(formData, "description");
-  const rarity = requireRarity(formData, "rarity");
-  const xpCost = requireInteger(formData, "xp_cost", 0);
-  const unlocked = readBoolean(formData, "unlocked") ? 1 : 0;
-  const id = createUniqueId("rewards", `reward-${slugify(title)}`);
-  const displayOrder = getNextDisplayOrder("rewards");
 
-  database
-    .prepare(
-      `
-        INSERT INTO rewards (id, title, description, rarity, xp_cost, unlocked, display_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `,
-    )
-    .run(id, title, description, rarity, xpCost, unlocked, displayOrder);
+  await createRewardRecord({
+    title,
+    description: requireString(formData, "description"),
+    rarity: requireRarity(formData, "rarity"),
+    xpCost: requireInteger(formData, "xp_cost", 0),
+    unlocked: readBoolean(formData, "unlocked"),
+    slugBase: slugify(title),
+  });
 
   revalidatePath("/");
 }
 
 export async function createQuestAction(formData: FormData): Promise<void> {
-  const database = getSqliteDatabase();
-  const templateId = requireString(formData, "template_id");
   const type = requireQuestType(formData, "type");
   const progressKind = requireProgressKind(formData, "progress_kind");
   const title = requireString(formData, "title");
-  const summary = requireString(formData, "summary");
-  const xpValue = requireInteger(formData, "xp_value", 0);
-  const rewardId = readOptionalString(formData, "reward_id");
-  const isCore = readBoolean(formData, "is_core") ? 1 : 0;
-  const targetValue = progressKind === "counter" ? readOptionalInteger(formData, "target_value") : null;
-  const unit = progressKind === "counter" ? readOptionalString(formData, "unit") : null;
-  const id = createUniqueId("quests", `${type}-${slugify(title)}`);
-  const displayOrder = getNextDisplayOrder("quests", {
-    column: "template_id",
-    value: templateId,
-  });
-  const cadenceLabel = getCadenceLabel(type);
 
-  ensureRecordExists("templates", templateId);
-
-  if (rewardId) {
-    ensureRecordExists("rewards", rewardId);
-  }
-
-  const transaction = database.transaction(() => {
-    database
-      .prepare(
-        `
-          INSERT INTO quests (
-            id,
-            template_id,
-            type,
-            progress_kind,
-            title,
-            summary,
-            cadence_label,
-            reward_label,
-            xp_value,
-            is_core,
-            target_value,
-            unit,
-            display_order
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-      )
-      .run(
-        id,
-        templateId,
-        type,
-        progressKind,
-        title,
-        summary,
-        cadenceLabel,
-        "Reward link available in Forge",
-        xpValue,
-        isCore,
-        targetValue,
-        unit,
-        displayOrder,
-      );
-
-    if (type !== "daily") {
-      database
-        .prepare(
-          `
-            INSERT INTO quest_progress (quest_id, current_value, completed)
-            VALUES (?, 0, 0)
-          `,
-        )
-        .run(id);
-    }
-
-    if (rewardId) {
-      database
-        .prepare(`DELETE FROM quest_rewards WHERE quest_id = ?`)
-        .run(id);
-      database
-        .prepare(
-          `
-            INSERT INTO quest_rewards (quest_id, reward_id)
-            VALUES (?, ?)
-          `,
-        )
-        .run(id, rewardId);
-    }
+  await createQuestRecord({
+    templateId: requireString(formData, "template_id"),
+    type,
+    progressKind,
+    title,
+    summary: requireString(formData, "summary"),
+    xpValue: requireInteger(formData, "xp_value", 0),
+    rewardId: readOptionalString(formData, "reward_id"),
+    isCore: readBoolean(formData, "is_core"),
+    targetValue:
+      progressKind === "counter"
+        ? readOptionalInteger(formData, "target_value")
+        : null,
+    unit:
+      progressKind === "counter" ? readOptionalString(formData, "unit") : null,
+    slugBase: slugify(title),
   });
 
-  transaction();
   revalidatePath("/");
 }
 
 export async function createQuestProgressOptionAction(
   formData: FormData,
 ): Promise<void> {
-  const database = getSqliteDatabase();
-  const questId = requireString(formData, "quest_id");
   const label = requireString(formData, "label");
-  const value = requireInteger(formData, "value", 1);
-  const id = createUniqueId("quest_progress_options", `${questId}-${slugify(label)}`);
-  const displayOrder = getNextDisplayOrder("quest_progress_options", {
-    column: "quest_id",
-    value: questId,
+
+  await createQuestProgressOptionRecord({
+    questId: requireString(formData, "quest_id"),
+    label,
+    value: requireInteger(formData, "value", 1),
+    slugBase: slugify(label),
   });
-  const questRow = database
-    .prepare(
-      `
-        SELECT progress_kind
-        FROM quests
-        WHERE id = ?
-      `,
-    )
-    .get(questId) as { progress_kind: QuestProgressKind } | undefined;
-
-  if (!questRow) {
-    throw new Error(`Missing quest record for id ${questId}`);
-  }
-
-  if (questRow.progress_kind !== "counter") {
-    throw new Error("Progress options can only be added to counter quests.");
-  }
-
-  database
-    .prepare(
-      `
-        INSERT INTO quest_progress_options (id, quest_id, label, value, display_order)
-        VALUES (?, ?, ?, ?, ?)
-      `,
-    )
-    .run(id, questId, label, value, displayOrder);
 
   revalidatePath("/");
 }
@@ -380,39 +198,22 @@ export async function createQuestProgressOptionAction(
 export async function attachRewardToQuestAction(
   formData: FormData,
 ): Promise<void> {
-  const database = getSqliteDatabase();
-  const questId = requireString(formData, "quest_id");
-  const rewardId = requireString(formData, "reward_id");
+  await attachRewardToQuestRecord(
+    requireString(formData, "quest_id"),
+    requireString(formData, "reward_id"),
+  );
 
-  ensureRecordExists("quests", questId);
-  ensureRecordExists("rewards", rewardId);
-
-  const transaction = database.transaction(() => {
-    database.prepare(`DELETE FROM quest_rewards WHERE quest_id = ?`).run(questId);
-    database
-      .prepare(
-        `
-          INSERT INTO quest_rewards (quest_id, reward_id)
-          VALUES (?, ?)
-        `,
-      )
-      .run(questId, rewardId);
-  });
-
-  transaction();
   revalidatePath("/");
 }
 
 export async function toggleDailyQuestAction(formData: FormData): Promise<void> {
-  const questId = requireString(formData, "quest_id");
-  toggleDailyBooleanQuest(questId);
+  await toggleDailyBooleanQuest(requireString(formData, "quest_id"));
   revalidatePath("/");
 }
 
 export async function applyQuestProgressOptionAction(
   formData: FormData,
 ): Promise<void> {
-  const optionId = requireString(formData, "option_id");
-  applyQuestProgressOption(optionId);
+  await applyQuestProgressOption(requireString(formData, "option_id"));
   revalidatePath("/");
 }

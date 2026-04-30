@@ -1,7 +1,5 @@
 import "server-only";
 
-import BetterSqlite3 from "better-sqlite3";
-
 import {
   DEFAULT_BOSS_THRESHOLD,
   getQuestCompletion,
@@ -10,9 +8,13 @@ import {
   type QuestProgressKind,
   type QuestType,
 } from "@/lib/titan";
-import { getSqliteDatabase } from "@/lib/server/database";
-
-type SqliteDatabase = InstanceType<typeof BetterSqlite3>;
+import {
+  executeBatch,
+  getTitanDatabase,
+  queryAll,
+  queryFirst,
+  type TitanDatabase,
+} from "@/lib/server/database";
 
 interface QuestMutationRow {
   id: string;
@@ -54,47 +56,36 @@ function getMonthKey(date: string): string {
   return date.slice(0, 7);
 }
 
-function getSettingMap(database: SqliteDatabase): Record<string, string> {
-  const rows = database
-    .prepare("SELECT key, value FROM app_settings ORDER BY key")
-    .all() as AppSettingRecord[];
+async function getSettingMap(
+  database: TitanDatabase,
+): Promise<Record<string, string>> {
+  const rows = await queryAll<AppSettingRecord>(
+    "SELECT key, value FROM app_settings ORDER BY key",
+    [],
+    database,
+  );
 
   return Object.fromEntries(rows.map((row) => [row.key, row.value]));
 }
 
-function getBossThreshold(database: SqliteDatabase): number {
-  const settings = getSettingMap(database);
+async function getBossThreshold(database: TitanDatabase): Promise<number> {
+  const settings = await getSettingMap(database);
   return Number(settings.boss_threshold ?? DEFAULT_BOSS_THRESHOLD);
 }
 
-function ensureDailyLog(
-  database: SqliteDatabase,
-  templateId: string,
-  date: string,
-): void {
-  database
-    .prepare(
-      `
-        INSERT INTO daily_logs (date, template_id)
-        VALUES (?, ?)
-        ON CONFLICT(date, template_id) DO UPDATE SET
-          updated_at = CURRENT_TIMESTAMP
-      `,
-    )
-    .run(date, templateId);
-}
-
-function getQuestMutationRow(questId: string): QuestMutationRow {
-  const database = getSqliteDatabase();
-  const row = database
-    .prepare(
-      `
-        SELECT id, template_id, type, progress_kind, target_value
-        FROM quests
-        WHERE id = ?
-      `,
-    )
-    .get(questId) as QuestMutationRow | undefined;
+async function getQuestMutationRow(
+  questId: string,
+  database: TitanDatabase,
+): Promise<QuestMutationRow> {
+  const row = await queryFirst<QuestMutationRow>(
+    `
+      SELECT id, template_id, type, progress_kind, target_value
+      FROM quests
+      WHERE id = ?
+    `,
+    [questId],
+    database,
+  );
 
   if (!row) {
     throw new Error(`Missing quest record for id ${questId}`);
@@ -103,25 +94,27 @@ function getQuestMutationRow(questId: string): QuestMutationRow {
   return row;
 }
 
-function getProgressOptionMutationRow(optionId: string): ProgressOptionMutationRow {
-  const database = getSqliteDatabase();
-  const row = database
-    .prepare(
-      `
-        SELECT
-          qpo.id,
-          qpo.value,
-          q.id AS quest_id,
-          q.template_id,
-          q.type,
-          q.progress_kind,
-          q.target_value
-        FROM quest_progress_options qpo
-        INNER JOIN quests q ON q.id = qpo.quest_id
-        WHERE qpo.id = ?
-      `,
-    )
-    .get(optionId) as ProgressOptionMutationRow | undefined;
+async function getProgressOptionMutationRow(
+  optionId: string,
+  database: TitanDatabase,
+): Promise<ProgressOptionMutationRow> {
+  const row = await queryFirst<ProgressOptionMutationRow>(
+    `
+      SELECT
+        qpo.id,
+        qpo.value,
+        q.id AS quest_id,
+        q.template_id,
+        q.type,
+        q.progress_kind,
+        q.target_value
+      FROM quest_progress_options qpo
+      INNER JOIN quests q ON q.id = qpo.quest_id
+      WHERE qpo.id = ?
+    `,
+    [optionId],
+    database,
+  );
 
   if (!row) {
     throw new Error(`Missing progress option for id ${optionId}`);
@@ -130,44 +123,61 @@ function getProgressOptionMutationRow(optionId: string): ProgressOptionMutationR
   return row;
 }
 
-function recomputeMonthlyState(
-  database: SqliteDatabase,
+async function recomputeMonthlyState(
+  database: TitanDatabase,
   templateId: string,
   date: string,
-): void {
+): Promise<void> {
   const month = getMonthKey(date);
-  const threshold = getBossThreshold(database);
   const monthPattern = `${month}-%`;
-  const coreQuests = database
-    .prepare(
-      `
-        SELECT id, progress_kind, target_value
-        FROM quests
-        WHERE template_id = ? AND type = 'daily' AND is_core = 1
-        ORDER BY display_order ASC
-      `,
-    )
-    .all(templateId) as CoreQuestRow[];
-  const logs = database
-    .prepare(
-      `
-        SELECT date
-        FROM daily_logs
-        WHERE template_id = ? AND date LIKE ?
-        ORDER BY date ASC
-      `,
-    )
-    .all(templateId, monthPattern) as Array<{ date: string }>;
-  const entries = database
-    .prepare(
-      `
-        SELECT e.date, e.template_id, e.quest_id, e.completed, e.value
-        FROM daily_log_entries e
-        INNER JOIN quests q ON q.id = e.quest_id
-        WHERE e.template_id = ? AND q.template_id = ? AND q.type = 'daily' AND q.is_core = 1 AND e.date LIKE ?
-      `,
-    )
-    .all(templateId, templateId, monthPattern) as DailyEntryRow[];
+  const [threshold, coreQuests, logs, entries, settings, successTargetRow] =
+    await Promise.all([
+      getBossThreshold(database),
+      queryAll<CoreQuestRow>(
+        `
+          SELECT id, progress_kind, target_value
+          FROM quests
+          WHERE template_id = ? AND type = 'daily' AND is_core = 1
+          ORDER BY display_order ASC
+        `,
+        [templateId],
+        database,
+      ),
+      queryAll<{ date: string }>(
+        `
+          SELECT date
+          FROM daily_logs
+          WHERE template_id = ? AND date LIKE ?
+          ORDER BY date ASC
+        `,
+        [templateId, monthPattern],
+        database,
+      ),
+      queryAll<DailyEntryRow>(
+        `
+          SELECT e.date, e.template_id, e.quest_id, e.completed, e.value
+          FROM daily_log_entries e
+          INNER JOIN quests q ON q.id = e.quest_id
+          WHERE e.template_id = ? AND q.template_id = ? AND q.type = 'daily' AND q.is_core = 1 AND e.date LIKE ?
+        `,
+        [templateId, templateId, monthPattern],
+        database,
+      ),
+      getSettingMap(database),
+      queryFirst<{ success_target: number }>(
+        `
+          SELECT success_target
+          FROM templates
+          WHERE id = ?
+        `,
+        [templateId],
+        database,
+      ),
+    ]);
+
+  if (!successTargetRow) {
+    throw new Error(`Missing template record for id ${templateId}`);
+  }
 
   const entriesByDate = entries.reduce<Map<string, Map<string, DailyEntryRow>>>(
     (accumulator, entry) => {
@@ -178,21 +188,6 @@ function recomputeMonthlyState(
     },
     new Map(),
   );
-
-  const settings = getSettingMap(database);
-  const successTargetRow = database
-    .prepare(
-      `
-        SELECT success_target
-        FROM templates
-        WHERE id = ?
-      `,
-    )
-    .get(templateId) as { success_target: number } | undefined;
-
-  if (!successTargetRow) {
-    throw new Error(`Missing template record for id ${templateId}`);
-  }
 
   const successfulDays = logs.reduce((count, log) => {
     const entriesForDate = entriesByDate.get(log.date) ?? new Map<string, DailyEntryRow>();
@@ -214,10 +209,19 @@ function recomputeMonthlyState(
   }, 0);
   const totalDays = logs.length;
   const engagementScore = totalDays === 0 ? 0 : successfulDays / totalDays;
-
-  database
-    .prepare(
-      `
+  const monthlyBossQuest = await queryFirst<{ id: string; target_value: number | null }>(
+    `
+      SELECT id, target_value
+      FROM quests
+      WHERE template_id = ? AND id = 'monthly-boss'
+      LIMIT 1
+    `,
+    [templateId],
+    database,
+  );
+  const statements = [
+    {
+      sql: `
         INSERT INTO monthly_stats (
           month,
           template_id,
@@ -234,81 +238,80 @@ function recomputeMonthlyState(
           threshold = excluded.threshold,
           updated_at = CURRENT_TIMESTAMP
       `,
-    )
-    .run(month, templateId, engagementScore, successfulDays, totalDays, threshold);
+      params: [month, templateId, engagementScore, successfulDays, totalDays, threshold],
+    },
+    ...(monthlyBossQuest
+      ? [
+          {
+            sql: `
+              INSERT INTO quest_progress (quest_id, current_value, completed)
+              VALUES (?, ?, ?)
+              ON CONFLICT(quest_id) DO UPDATE SET
+                current_value = excluded.current_value,
+                completed = excluded.completed,
+                updated_at = CURRENT_TIMESTAMP
+            `,
+            params: [
+              monthlyBossQuest.id,
+              Math.round(engagementScore * 100),
+              Math.round(engagementScore * 100) >=
+              (monthlyBossQuest.target_value ?? Math.round(threshold * 100))
+                ? 1
+                : 0,
+            ],
+          },
+        ]
+      : []),
+    ...(settings.active_template_id === templateId
+      ? [
+          {
+            sql: `
+              INSERT INTO app_settings (key, value)
+              VALUES ('current_month_key', ?)
+              ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            `,
+            params: [month],
+          },
+        ]
+      : []),
+  ];
 
-  const monthlyBossQuest = database
-    .prepare(
-      `
-        SELECT id, target_value
-        FROM quests
-        WHERE template_id = ? AND id = 'monthly-boss'
-        LIMIT 1
-      `,
-    )
-    .get(templateId) as { id: string; target_value: number | null } | undefined;
-
-  if (monthlyBossQuest) {
-    const currentValue = Math.round(engagementScore * 100);
-    const targetValue =
-      monthlyBossQuest.target_value ?? Math.round(threshold * 100);
-    const completed = currentValue >= targetValue ? 1 : 0;
-
-    database
-      .prepare(
-        `
-          INSERT INTO quest_progress (quest_id, current_value, completed)
-          VALUES (?, ?, ?)
-          ON CONFLICT(quest_id) DO UPDATE SET
-            current_value = excluded.current_value,
-            completed = excluded.completed,
-            updated_at = CURRENT_TIMESTAMP
-        `,
-      )
-      .run(monthlyBossQuest.id, currentValue, completed);
-  }
-
-  if (settings.active_template_id === templateId) {
-    database
-      .prepare(
-        `
-          INSERT INTO app_settings (key, value)
-          VALUES ('current_month_key', ?)
-          ON CONFLICT(key) DO UPDATE SET value = excluded.value
-        `,
-      )
-      .run(month);
-  }
+  await executeBatch(statements, database);
 }
 
-export function toggleDailyBooleanQuest(questId: string): void {
-  const database = getSqliteDatabase();
-  const quest = getQuestMutationRow(questId);
+export async function toggleDailyBooleanQuest(questId: string): Promise<void> {
+  const database = await getTitanDatabase();
+  const quest = await getQuestMutationRow(questId, database);
 
   if (quest.type !== "daily" || quest.progress_kind !== "boolean") {
     throw new Error("Only daily boolean quests can be toggled directly.");
   }
 
   const date = getTodayIsoDate();
-  const transaction = database.transaction(() => {
-    ensureDailyLog(database, quest.template_id, date);
+  const currentEntry = await queryFirst<{ completed: number; value: number }>(
+    `
+      SELECT completed, value
+      FROM daily_log_entries
+      WHERE date = ? AND template_id = ? AND quest_id = ?
+    `,
+    [date, quest.template_id, quest.id],
+    database,
+  );
+  const nextCompleted = currentEntry?.completed === 1 ? 0 : 1;
 
-    const currentEntry = database
-      .prepare(
-        `
-          SELECT completed, value
-          FROM daily_log_entries
-          WHERE date = ? AND template_id = ? AND quest_id = ?
+  await executeBatch(
+    [
+      {
+        sql: `
+          INSERT INTO daily_logs (date, template_id)
+          VALUES (?, ?)
+          ON CONFLICT(date, template_id) DO UPDATE SET
+            updated_at = CURRENT_TIMESTAMP
         `,
-      )
-      .get(date, quest.template_id, quest.id) as
-      | { completed: number; value: number }
-      | undefined;
-    const nextCompleted = currentEntry?.completed === 1 ? 0 : 1;
-
-    database
-      .prepare(
-        `
+        params: [date, quest.template_id],
+      },
+      {
+        sql: `
           INSERT INTO daily_log_entries (date, template_id, quest_id, completed, value)
           VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(date, quest_id) DO UPDATE SET
@@ -316,45 +319,50 @@ export function toggleDailyBooleanQuest(questId: string): void {
             completed = excluded.completed,
             value = excluded.value
         `,
-      )
-      .run(date, quest.template_id, quest.id, nextCompleted, nextCompleted);
+        params: [date, quest.template_id, quest.id, nextCompleted, nextCompleted],
+      },
+    ],
+    database,
+  );
 
-    recomputeMonthlyState(database, quest.template_id, date);
-  });
-
-  transaction();
+  await recomputeMonthlyState(database, quest.template_id, date);
 }
 
-export function applyQuestProgressOption(optionId: string): void {
-  const database = getSqliteDatabase();
-  const option = getProgressOptionMutationRow(optionId);
+export async function applyQuestProgressOption(optionId: string): Promise<void> {
+  const database = await getTitanDatabase();
+  const option = await getProgressOptionMutationRow(optionId, database);
 
   if (option.type !== "daily" || option.progress_kind !== "counter") {
     throw new Error("Quick-add progress only applies to daily counter quests.");
   }
 
   const date = getTodayIsoDate();
-  const transaction = database.transaction(() => {
-    ensureDailyLog(database, option.template_id, date);
+  const currentEntry = await queryFirst<{ completed: number; value: number }>(
+    `
+      SELECT completed, value
+      FROM daily_log_entries
+      WHERE date = ? AND template_id = ? AND quest_id = ?
+    `,
+    [date, option.template_id, option.quest_id],
+    database,
+  );
+  const nextValue = (currentEntry?.value ?? 0) + option.value;
+  const completed =
+    option.target_value !== null && nextValue >= option.target_value ? 1 : 0;
 
-    const currentEntry = database
-      .prepare(
-        `
-          SELECT completed, value
-          FROM daily_log_entries
-          WHERE date = ? AND template_id = ? AND quest_id = ?
+  await executeBatch(
+    [
+      {
+        sql: `
+          INSERT INTO daily_logs (date, template_id)
+          VALUES (?, ?)
+          ON CONFLICT(date, template_id) DO UPDATE SET
+            updated_at = CURRENT_TIMESTAMP
         `,
-      )
-      .get(date, option.template_id, option.quest_id) as
-      | { completed: number; value: number }
-      | undefined;
-    const nextValue = (currentEntry?.value ?? 0) + option.value;
-    const completed =
-      option.target_value !== null && nextValue >= option.target_value ? 1 : 0;
-
-    database
-      .prepare(
-        `
+        params: [date, option.template_id],
+      },
+      {
+        sql: `
           INSERT INTO daily_log_entries (date, template_id, quest_id, completed, value)
           VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(date, quest_id) DO UPDATE SET
@@ -362,23 +370,21 @@ export function applyQuestProgressOption(optionId: string): void {
             completed = excluded.completed,
             value = excluded.value
         `,
-      )
-      .run(date, option.template_id, option.quest_id, completed, nextValue);
-
-    database
-      .prepare(
-        `
+        params: [date, option.template_id, option.quest_id, completed, nextValue],
+      },
+      {
+        sql: `
           INSERT INTO daily_option_uses (date, template_id, option_id, uses_count)
           VALUES (?, ?, ?, 1)
           ON CONFLICT(date, option_id) DO UPDATE SET
             template_id = excluded.template_id,
             uses_count = daily_option_uses.uses_count + 1
         `,
-      )
-      .run(date, option.template_id, option.id);
+        params: [date, option.template_id, option.id],
+      },
+    ],
+    database,
+  );
 
-    recomputeMonthlyState(database, option.template_id, date);
-  });
-
-  transaction();
+  await recomputeMonthlyState(database, option.template_id, date);
 }

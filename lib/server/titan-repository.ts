@@ -33,26 +33,29 @@ import {
   isSuccessfulDay,
 } from "@/lib/titan";
 import {
-  getSqliteDatabase,
-  getTitanDatabasePath,
-  requiresTitanProductionPersistenceConfig,
-  titanDatabaseExists,
+  TITAN_D1_BINDING,
+  getTitanDatabase,
+  isMissingTitanBindingError,
+  isMissingTitanSchemaError,
+  queryAll,
+  queryFirst,
+  type TitanDatabase,
 } from "@/lib/server/database";
 import { getTodayIsoDate } from "@/lib/server/titan-progress";
 
 type TitanAppState =
   | {
-      kind: "missing_database";
-      dbPath: string;
+      kind: "missing_binding";
+      bindingName: string;
+      configLocation: string;
     }
   | {
       kind: "empty_database";
-      dbPath: string;
+      bindingName: string;
     }
   | {
-      kind: "invalid_configuration";
-      envKey: string;
-      exampleValue: string;
+      kind: "missing_schema";
+      bindingName: string;
     }
   | {
       kind: "ready";
@@ -379,142 +382,160 @@ function buildFeaturedGoal(
   };
 }
 
-function queryQuestRecords(templateId: string): QuestRecord[] {
-  const database = getSqliteDatabase();
-
-  return database
-    .prepare(
-      `
-        SELECT
-          q.id,
-          q.template_id,
-          q.type,
-          q.progress_kind,
-          q.title,
-          q.summary,
-          q.cadence_label,
-          q.reward_label,
-          q.xp_value,
-          q.is_core,
-          q.target_value,
-          q.unit,
-          q.display_order,
-          (
-            SELECT qr.reward_id
-            FROM quest_rewards qr
-            WHERE qr.quest_id = q.id
-            ORDER BY qr.reward_id ASC
-            LIMIT 1
-          ) AS reward_id,
-          (
-            SELECT r.title
-            FROM quest_rewards qr
-            INNER JOIN rewards r ON r.id = qr.reward_id
-            WHERE qr.quest_id = q.id
-            ORDER BY r.title ASC
-            LIMIT 1
-          ) AS reward_title
-        FROM quests q
-        WHERE q.template_id = ?
-        ORDER BY q.display_order ASC
-      `,
-    )
-    .all(templateId) as QuestRecord[];
+async function queryQuestRecords(
+  database: TitanDatabase,
+  templateId: string,
+): Promise<QuestRecord[]> {
+  return queryAll<QuestRecord>(
+    `
+      SELECT
+        q.id,
+        q.template_id,
+        q.type,
+        q.progress_kind,
+        q.title,
+        q.summary,
+        q.cadence_label,
+        q.reward_label,
+        q.xp_value,
+        q.is_core,
+        q.target_value,
+        q.unit,
+        q.display_order,
+        (
+          SELECT qr.reward_id
+          FROM quest_rewards qr
+          WHERE qr.quest_id = q.id
+          ORDER BY qr.reward_id ASC
+          LIMIT 1
+        ) AS reward_id,
+        (
+          SELECT r.title
+          FROM quest_rewards qr
+          INNER JOIN rewards r ON r.id = qr.reward_id
+          WHERE qr.quest_id = q.id
+          ORDER BY r.title ASC
+          LIMIT 1
+        ) AS reward_title
+      FROM quests q
+      WHERE q.template_id = ?
+      ORDER BY q.display_order ASC
+    `,
+    [templateId],
+    database,
+  );
 }
 
 export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
-  const dbPath = getTitanDatabasePath();
+  let database: TitanDatabase;
 
-  if (requiresTitanProductionPersistenceConfig()) {
-    return {
-      kind: "invalid_configuration",
-      envKey: "TITAN_DB_PATH",
-      exampleValue: "/data/titan/titan.db",
-    };
+  try {
+    database = await getTitanDatabase();
+  } catch (error) {
+    if (isMissingTitanBindingError(error)) {
+      return {
+        kind: "missing_binding",
+        bindingName: TITAN_D1_BINDING,
+        configLocation: "wrangler.jsonc -> d1_databases[].binding",
+      };
+    }
+
+    throw error;
   }
 
-  if (!titanDatabaseExists()) {
-    return {
-      kind: "missing_database",
-      dbPath,
-    };
+  let settingsRows: AppSettingRecord[];
+  let templateRecords: TemplateRecord[];
+
+  try {
+    [settingsRows, templateRecords] = await Promise.all([
+      queryAll<AppSettingRecord>(
+        "SELECT key, value FROM app_settings ORDER BY key",
+        [],
+        database,
+      ),
+      queryAll<TemplateRecord>(
+        `
+          SELECT id, title, summary, success_target, display_order
+          FROM templates
+          ORDER BY display_order ASC
+        `,
+        [],
+        database,
+      ),
+    ]);
+  } catch (error) {
+    if (isMissingTitanSchemaError(error)) {
+      return {
+        kind: "missing_schema",
+        bindingName: TITAN_D1_BINDING,
+      };
+    }
+
+    throw error;
   }
 
-  const database = getSqliteDatabase();
-  const settings = getSettingMap(
-    database
-      .prepare("SELECT key, value FROM app_settings ORDER BY key")
-      .all() as AppSettingRecord[],
-  );
+  const settings = getSettingMap(settingsRows);
   const bossThreshold = Number(settings.boss_threshold ?? DEFAULT_BOSS_THRESHOLD);
   const playerName =
     settings.player_name ?? settings.pilot_name ?? settings.player_label ?? "Pilot";
-  const templateRecords = database
-    .prepare(
-      `
-        SELECT id, title, summary, success_target, display_order
-        FROM templates
-        ORDER BY display_order ASC
-      `,
-    )
-    .all() as TemplateRecord[];
 
   if (templateRecords.length === 0) {
     return {
       kind: "empty_database",
-      dbPath,
+      bindingName: TITAN_D1_BINDING,
     };
   }
 
   const activeTemplateRecord =
     templateRecords.find((record) => record.id === settings.active_template_id) ??
     templateRecords[0];
-  const questRecords = queryQuestRecords(activeTemplateRecord.id);
+  const questRecords = await queryQuestRecords(database, activeTemplateRecord.id);
   const totalCoreQuests = questRecords.filter(
     (record) => record.type === "daily" && toBoolean(record.is_core),
   ).length;
   const activeTemplate = mapTemplate(activeTemplateRecord, totalCoreQuests);
   const activeDate = getTodayIsoDate();
   const currentMonth = activeDate.slice(0, 7);
-  const monthlyStatsRecord =
-    (database
-      .prepare(
-        `
-          SELECT month, template_id, engagement_score, successful_days, total_days, threshold
-          FROM monthly_stats
-          WHERE month = ? AND template_id = ?
-        `,
-      )
-      .get(currentMonth, activeTemplate.id) as MonthlyStatsRecord | undefined) ?? {
-      month: currentMonth,
-      template_id: activeTemplate.id,
-      engagement_score: 0,
-      successful_days: 0,
-      total_days: 0,
-      threshold: bossThreshold,
-    };
-  const latestDailyEntries = database
-    .prepare(
+  const [
+    monthlyStatsRow,
+    latestDailyEntries,
+    questProgressRecords,
+    progressOptionRecords,
+    dailyOptionUseRecords,
+    rewardRecords,
+    recentDailyLogs,
+    recentDailyEntries,
+  ] = await Promise.all([
+    queryFirst<MonthlyStatsRecord>(
+      `
+        SELECT month, template_id, engagement_score, successful_days, total_days, threshold
+        FROM monthly_stats
+        WHERE month = ? AND template_id = ?
+      `,
+      [currentMonth, activeTemplate.id],
+      database,
+    ),
+    queryAll<DailyLogEntryRecord>(
       `
         SELECT e.date, e.template_id, e.quest_id, e.completed, e.value
         FROM daily_log_entries e
         INNER JOIN quests q ON q.id = e.quest_id
         WHERE e.date = ? AND e.template_id = ? AND q.template_id = ?
       `,
-    )
-    .all(activeDate, activeTemplate.id, activeTemplate.id) as DailyLogEntryRecord[];
-  const questProgressRecords = database
-    .prepare(
+      [activeDate, activeTemplate.id, activeTemplate.id],
+      database,
+    ),
+    queryAll<QuestProgressRecord>(
       `
         SELECT qp.quest_id, qp.current_value, qp.completed
         FROM quest_progress qp
         INNER JOIN quests q ON q.id = qp.quest_id
         WHERE q.template_id = ?
       `,
-    )
-    .all(activeTemplate.id) as QuestProgressRecord[];
-  const progressOptionRecords = database
-    .prepare(
+      [activeTemplate.id],
+      database,
+    ),
+    queryAll<QuestProgressOptionRecord>(
       `
         SELECT qpo.id, qpo.quest_id, qpo.label, qpo.value, qpo.display_order
         FROM quest_progress_options qpo
@@ -522,10 +543,10 @@ export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
         WHERE q.template_id = ?
         ORDER BY qpo.display_order ASC
       `,
-    )
-    .all(activeTemplate.id) as QuestProgressOptionRecord[];
-  const dailyOptionUseRecords = database
-    .prepare(
+      [activeTemplate.id],
+      database,
+    ),
+    queryAll<DailyOptionUseRecord>(
       `
         SELECT dou.date, dou.template_id, dou.option_id, dou.uses_count
         FROM daily_option_uses dou
@@ -533,21 +554,19 @@ export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
         INNER JOIN quests q ON q.id = qpo.quest_id
         WHERE dou.date = ? AND dou.template_id = ? AND q.template_id = ?
       `,
-    )
-    .all(activeDate, activeTemplate.id, activeTemplate.id) as DailyOptionUseRecord[];
-  const rewards = (
-    database
-      .prepare(
-        `
-          SELECT id, title, description, rarity, xp_cost, unlocked, display_order
-          FROM rewards
-          ORDER BY display_order ASC
-        `,
-      )
-      .all() as RewardRecord[]
-  ).map(mapReward);
-  const recentDailyLogs = database
-    .prepare(
+      [activeDate, activeTemplate.id, activeTemplate.id],
+      database,
+    ),
+    queryAll<RewardRecord>(
+      `
+        SELECT id, title, description, rarity, xp_cost, unlocked, display_order
+        FROM rewards
+        ORDER BY display_order ASC
+      `,
+      [],
+      database,
+    ),
+    queryAll<DailyLogRecord>(
       `
         SELECT date, template_id
         FROM daily_logs
@@ -555,27 +574,36 @@ export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
         ORDER BY date DESC
         LIMIT 31
       `,
-    )
-    .all(activeTemplate.id) as DailyLogRecord[];
-  const recentDailyEntries = recentDailyLogs.length
-    ? (database
-        .prepare(
-          `
-            SELECT e.date, e.template_id, e.quest_id, e.completed, e.value
-            FROM daily_log_entries e
-            INNER JOIN quests q ON q.id = e.quest_id
-            INNER JOIN (
-              SELECT date, template_id
-              FROM daily_logs
-              WHERE template_id = ?
-              ORDER BY date DESC
-              LIMIT 31
-            ) recent ON recent.date = e.date AND recent.template_id = e.template_id
-            WHERE e.template_id = ? AND q.template_id = ?
-          `,
-        )
-        .all(activeTemplate.id, activeTemplate.id, activeTemplate.id) as DailyLogEntryRecord[])
-    : [];
+      [activeTemplate.id],
+      database,
+    ),
+    queryAll<DailyLogEntryRecord>(
+      `
+        SELECT e.date, e.template_id, e.quest_id, e.completed, e.value
+        FROM daily_log_entries e
+        INNER JOIN quests q ON q.id = e.quest_id
+        INNER JOIN (
+          SELECT date, template_id
+          FROM daily_logs
+          WHERE template_id = ?
+          ORDER BY date DESC
+          LIMIT 31
+        ) recent ON recent.date = e.date AND recent.template_id = e.template_id
+        WHERE e.template_id = ? AND q.template_id = ?
+      `,
+      [activeTemplate.id, activeTemplate.id, activeTemplate.id],
+      database,
+    ),
+  ]);
+  const monthlyStatsRecord = monthlyStatsRow ?? {
+    month: currentMonth,
+    template_id: activeTemplate.id,
+    engagement_score: 0,
+    successful_days: 0,
+    total_days: 0,
+    threshold: bossThreshold,
+  };
+  const rewards = rewardRecords.map(mapReward);
 
   const dailyEntriesByQuestId = buildDailyEntryMap(latestDailyEntries);
   const progressByQuestId = buildProgressMap(questProgressRecords);
@@ -646,14 +674,14 @@ export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
 
 export const getTitanManagementSnapshot = cache(
   async (): Promise<ManagementSnapshot> => {
-    const database = getSqliteDatabase();
-    const settings = getSettingMap(
-      database
-        .prepare("SELECT key, value FROM app_settings ORDER BY key")
-        .all() as AppSettingRecord[],
-    );
-    const templateRows = database
-      .prepare(
+    const database = await getTitanDatabase();
+    const [settingsRows, templateRows, questRows, rewardRows] = await Promise.all([
+      queryAll<AppSettingRecord>(
+        "SELECT key, value FROM app_settings ORDER BY key",
+        [],
+        database,
+      ),
+      queryAll<TemplateSummaryRow>(
         `
           SELECT
             t.id,
@@ -668,14 +696,10 @@ export const getTitanManagementSnapshot = cache(
           GROUP BY t.id, t.title, t.summary, t.success_target, t.display_order
           ORDER BY t.display_order ASC
         `,
-      )
-      .all() as TemplateSummaryRow[];
-    const activeTemplateId =
-      templateRows.find((row) => row.id === settings.active_template_id)?.id ??
-      templateRows[0]?.id ??
-      "";
-    const questRows = database
-      .prepare(
+        [],
+        database,
+      ),
+      queryAll<QuestSummaryRow>(
         `
           SELECT
             q.id,
@@ -716,10 +740,10 @@ export const getTitanManagementSnapshot = cache(
           INNER JOIN templates t ON t.id = q.template_id
           ORDER BY t.display_order ASC, q.display_order ASC
         `,
-      )
-      .all() as QuestSummaryRow[];
-    const rewardRows = database
-      .prepare(
+        [],
+        database,
+      ),
+      queryAll<RewardSummaryRow>(
         `
           SELECT
             r.id,
@@ -737,8 +761,15 @@ export const getTitanManagementSnapshot = cache(
           FROM rewards r
           ORDER BY r.display_order ASC
         `,
-      )
-      .all() as RewardSummaryRow[];
+        [],
+        database,
+      ),
+    ]);
+    const settings = getSettingMap(settingsRows);
+    const activeTemplateId =
+      templateRows.find((row) => row.id === settings.active_template_id)?.id ??
+      templateRows[0]?.id ??
+      "";
 
     return {
       activeTemplateId,
