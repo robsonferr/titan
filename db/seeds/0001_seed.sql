@@ -1,7 +1,7 @@
 PRAGMA foreign_keys = ON;
 
 INSERT OR REPLACE INTO app_settings (key, value) VALUES
-  ('player_name', 'Mateus'),
+  ('player_name', 'Player'),
   ('active_template_id', 'balanced-hero'),
   ('boss_threshold', '0.7');
 
