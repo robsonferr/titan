@@ -1,6 +1,7 @@
 import { TitanDashboard } from "@/app/_components/titan-dashboard";
 import { TitanDeploymentNotice } from "@/app/_components/titan-deployment-notice";
 import { TitanEmptyDatabaseNotice } from "@/app/_components/titan-empty-database-notice";
+import { TitanLogoutButton } from "@/app/_components/titan-logout-button";
 import { TitanManagementConsole } from "@/app/_components/titan-management-console";
 import { TitanSetupNotice } from "@/app/_components/titan-setup-notice";
 import {
@@ -58,12 +59,15 @@ export default async function Home() {
   }
 
   return (
-    <TitanDashboard
-      snapshot={state.snapshot}
-      onApplyQuestProgressOption={applyQuestProgressOptionAction}
-      onToggleDailyQuest={toggleDailyQuestAction}
-    >
-      <TitanManagementConsole management={management} />
-    </TitanDashboard>
+    <>
+      <TitanLogoutButton />
+      <TitanDashboard
+        snapshot={state.snapshot}
+        onApplyQuestProgressOption={applyQuestProgressOptionAction}
+        onToggleDailyQuest={toggleDailyQuestAction}
+      >
+        <TitanManagementConsole management={management} />
+      </TitanDashboard>
+    </>
   );
 }

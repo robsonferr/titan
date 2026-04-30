@@ -17,10 +17,51 @@ type OrderedTable =
 
 type ExistingTable = "templates" | "quests" | "rewards";
 
+type ParentColumn = "template_id" | "quest_id";
+
 interface ParentKey {
-  column: "template_id" | "quest_id";
+  column: ParentColumn;
   value: string;
 }
+
+const NEXT_DISPLAY_ORDER_SQL: Record<OrderedTable, string> = {
+  templates:
+    "SELECT COALESCE(MAX(display_order), 0) AS max_order FROM templates",
+  quests: "SELECT COALESCE(MAX(display_order), 0) AS max_order FROM quests",
+  rewards: "SELECT COALESCE(MAX(display_order), 0) AS max_order FROM rewards",
+  quest_progress_options:
+    "SELECT COALESCE(MAX(display_order), 0) AS max_order FROM quest_progress_options",
+};
+
+const NEXT_DISPLAY_ORDER_BY_PARENT_SQL: Record<
+  OrderedTable,
+  Partial<Record<ParentColumn, string>>
+> = {
+  templates: {},
+  quests: {
+    template_id:
+      "SELECT COALESCE(MAX(display_order), 0) AS max_order FROM quests WHERE template_id = ?",
+  },
+  rewards: {},
+  quest_progress_options: {
+    quest_id:
+      "SELECT COALESCE(MAX(display_order), 0) AS max_order FROM quest_progress_options WHERE quest_id = ?",
+  },
+};
+
+const FIND_BY_ID_SQL: Record<OrderedTable, string> = {
+  templates: "SELECT id FROM templates WHERE id = ? LIMIT 1",
+  quests: "SELECT id FROM quests WHERE id = ? LIMIT 1",
+  rewards: "SELECT id FROM rewards WHERE id = ? LIMIT 1",
+  quest_progress_options:
+    "SELECT id FROM quest_progress_options WHERE id = ? LIMIT 1",
+};
+
+const ENSURE_EXISTS_SQL: Record<ExistingTable, string> = {
+  templates: FIND_BY_ID_SQL.templates,
+  quests: FIND_BY_ID_SQL.quests,
+  rewards: FIND_BY_ID_SQL.rewards,
+};
 
 interface CreateTemplateInput {
   title: string;
@@ -65,17 +106,19 @@ async function getNextDisplayOrder(
   parentKey?: ParentKey,
 ): Promise<number> {
   if (!parentKey) {
-    const row = await queryFirst<{ max_order: number }>(
-      `SELECT COALESCE(MAX(display_order), 0) AS max_order FROM ${table}`,
-      [],
-      database,
-    );
-
+    const sql = NEXT_DISPLAY_ORDER_SQL[table];
+    const row = await queryFirst<{ max_order: number }>(sql, [], database);
     return (row?.max_order ?? 0) + 1;
   }
 
+  const sql = NEXT_DISPLAY_ORDER_BY_PARENT_SQL[table][parentKey.column];
+
+  if (!sql) {
+    throw new Error("TITAN_INTERNAL_ERROR");
+  }
+
   const row = await queryFirst<{ max_order: number }>(
-    `SELECT COALESCE(MAX(display_order), 0) AS max_order FROM ${table} WHERE ${parentKey.column} = ?`,
+    sql,
     [parentKey.value],
     database,
   );
@@ -88,15 +131,12 @@ async function createUniqueId(
   base: string,
   database: TitanDatabase,
 ): Promise<string> {
+  const sql = FIND_BY_ID_SQL[table];
   let candidate = base;
   let suffix = 2;
 
   while (
-    await queryFirst<{ id: string }>(
-      `SELECT id FROM ${table} WHERE id = ? LIMIT 1`,
-      [candidate],
-      database,
-    )
+    await queryFirst<{ id: string }>(sql, [candidate], database)
   ) {
     candidate = `${base}-${suffix}`;
     suffix += 1;
@@ -111,13 +151,13 @@ async function ensureRecordExists(
   database: TitanDatabase,
 ): Promise<void> {
   const row = await queryFirst<{ id: string }>(
-    `SELECT id FROM ${table} WHERE id = ? LIMIT 1`,
+    ENSURE_EXISTS_SQL[table],
     [id],
     database,
   );
 
   if (!row) {
-    throw new Error(`Missing ${table} record for id ${id}`);
+    throw new Error("TITAN_NOT_FOUND");
   }
 }
 
@@ -312,11 +352,11 @@ export async function createQuestProgressOptionRecord({
   );
 
   if (!questRow) {
-    throw new Error(`Missing quest record for id ${questId}`);
+    throw new Error("TITAN_NOT_FOUND");
   }
 
   if (questRow.progress_kind !== "counter") {
-    throw new Error("Progress options can only be added to counter quests.");
+    throw new Error("TITAN_INVALID_PROGRESS_KIND");
   }
 
   await executeStatement(

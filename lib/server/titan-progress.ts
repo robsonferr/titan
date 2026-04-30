@@ -88,7 +88,7 @@ async function getQuestMutationRow(
   );
 
   if (!row) {
-    throw new Error(`Missing quest record for id ${questId}`);
+    throw new Error("TITAN_NOT_FOUND");
   }
 
   return row;
@@ -117,7 +117,7 @@ async function getProgressOptionMutationRow(
   );
 
   if (!row) {
-    throw new Error(`Missing progress option for id ${optionId}`);
+    throw new Error("TITAN_NOT_FOUND");
   }
 
   return row;
@@ -176,7 +176,7 @@ async function recomputeMonthlyState(
     ]);
 
   if (!successTargetRow) {
-    throw new Error(`Missing template record for id ${templateId}`);
+    throw new Error("TITAN_NOT_FOUND");
   }
 
   const entriesByDate = entries.reduce<Map<string, Map<string, DailyEntryRow>>>(
@@ -284,7 +284,7 @@ export async function toggleDailyBooleanQuest(questId: string): Promise<void> {
   const quest = await getQuestMutationRow(questId, database);
 
   if (quest.type !== "daily" || quest.progress_kind !== "boolean") {
-    throw new Error("Only daily boolean quests can be toggled directly.");
+    throw new Error("TITAN_INVALID_QUEST_KIND");
   }
 
   const date = getTodayIsoDate();
@@ -333,7 +333,7 @@ export async function applyQuestProgressOption(optionId: string): Promise<void> 
   const option = await getProgressOptionMutationRow(optionId, database);
 
   if (option.type !== "daily" || option.progress_kind !== "counter") {
-    throw new Error("Quick-add progress only applies to daily counter quests.");
+    throw new Error("TITAN_INVALID_QUEST_KIND");
   }
 
   const date = getTodayIsoDate();

@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import type { QuestProgressKind, QuestType, RewardRarity } from "@/lib/titan";
+import { getAuthSession } from "@/lib/server/auth";
 import {
   attachRewardToQuestRecord,
   createQuestProgressOptionRecord,
@@ -16,23 +18,55 @@ import {
   toggleDailyBooleanQuest,
 } from "@/lib/server/titan-progress";
 
-function requireString(formData: FormData, key: string): string {
+const FIELD_LIMITS = {
+  title: 120,
+  summary: 2048,
+  description: 2048,
+  label: 80,
+  unit: 32,
+  id: 200,
+} as const;
+
+const NUMERIC_LIMITS = {
+  successTarget: { min: 1, max: 100 },
+  xpCost: { min: 0, max: 1_000_000 },
+  xpValue: { min: 0, max: 1_000_000 },
+  targetValue: { min: 0, max: 1_000_000 },
+  optionValue: { min: 1, max: 10_000 },
+} as const;
+
+class ValidationError extends Error {
+  constructor() {
+    super("TITAN_VALIDATION_ERROR");
+    this.name = "TitanValidationError";
+  }
+}
+
+function requireString(
+  formData: FormData,
+  key: string,
+  maxLength: number,
+): string {
   const value = formData.get(key);
 
   if (typeof value !== "string") {
-    throw new Error(`Missing field: ${key}`);
+    throw new ValidationError();
   }
 
   const normalized = value.trim();
 
-  if (!normalized) {
-    throw new Error(`Empty field: ${key}`);
+  if (!normalized || normalized.length > maxLength) {
+    throw new ValidationError();
   }
 
   return normalized;
 }
 
-function readOptionalString(formData: FormData, key: string): string | null {
+function readOptionalString(
+  formData: FormData,
+  key: string,
+  maxLength: number,
+): string | null {
   const value = formData.get(key);
 
   if (typeof value !== "string") {
@@ -40,25 +74,41 @@ function readOptionalString(formData: FormData, key: string): string | null {
   }
 
   const normalized = value.trim();
-  return normalized ? normalized : null;
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.length > maxLength) {
+    throw new ValidationError();
+  }
+
+  return normalized;
 }
 
 function requireInteger(
   formData: FormData,
   key: string,
-  minimum = 0,
+  minimum: number,
+  maximum: number,
 ): number {
-  const value = Number(requireString(formData, key));
+  const raw = requireString(formData, key, 16);
+  const value = Number(raw);
 
-  if (!Number.isInteger(value) || value < minimum) {
-    throw new Error(`Invalid numeric field: ${key}`);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new ValidationError();
   }
 
   return value;
 }
 
-function readOptionalInteger(formData: FormData, key: string): number | null {
-  const rawValue = readOptionalString(formData, key);
+function readOptionalInteger(
+  formData: FormData,
+  key: string,
+  minimum: number,
+  maximum: number,
+): number | null {
+  const rawValue = readOptionalString(formData, key, 16);
 
   if (rawValue === null) {
     return null;
@@ -66,8 +116,8 @@ function readOptionalInteger(formData: FormData, key: string): number | null {
 
   const value = Number(rawValue);
 
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error(`Invalid numeric field: ${key}`);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new ValidationError();
   }
 
   return value;
@@ -78,142 +128,228 @@ function readBoolean(formData: FormData, key: string): boolean {
 }
 
 function requireQuestType(formData: FormData, key: string): QuestType {
-  const value = requireString(formData, key);
+  const value = requireString(formData, key, 16);
 
-  if (!["daily", "weekly", "monthly", "epic"].includes(value)) {
-    throw new Error(`Invalid quest type: ${value}`);
+  if (value !== "daily" && value !== "weekly" && value !== "monthly" && value !== "epic") {
+    throw new ValidationError();
   }
 
-  return value as QuestType;
+  return value;
 }
 
 function requireProgressKind(
   formData: FormData,
   key: string,
 ): QuestProgressKind {
-  const value = requireString(formData, key);
+  const value = requireString(formData, key, 16);
 
-  if (!["boolean", "counter"].includes(value)) {
-    throw new Error(`Invalid quest progress kind: ${value}`);
+  if (value !== "boolean" && value !== "counter") {
+    throw new ValidationError();
   }
 
-  return value as QuestProgressKind;
+  return value;
 }
 
 function requireRarity(formData: FormData, key: string): RewardRarity {
-  const value = requireString(formData, key);
+  const value = requireString(formData, key, 16);
 
-  if (!["common", "rare", "legendary"].includes(value)) {
-    throw new Error(`Invalid reward rarity: ${value}`);
+  if (value !== "common" && value !== "rare" && value !== "legendary") {
+    throw new ValidationError();
   }
 
-  return value as RewardRarity;
+  return value;
 }
 
 function slugify(value: string): string {
   const slug = value
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 
   return slug || "item";
 }
 
-export async function createTemplateAction(formData: FormData): Promise<void> {
-  const title = requireString(formData, "title");
+async function runAction(
+  name: string,
+  fn: () => Promise<void>,
+): Promise<void> {
+  let session;
+  try {
+    session = await getAuthSession();
+  } catch (error) {
+    console.error(`[titan-auth:${name}]`, error);
+    throw new Error("TITAN_ACTION_FAILED");
+  }
 
-  await createTemplateRecord({
-    title,
-    summary: requireString(formData, "summary"),
-    successTarget: requireInteger(formData, "success_target", 1),
-    slugBase: slugify(title),
-  });
+  if (!session) {
+    redirect("/login");
+  }
 
-  revalidatePath("/");
+  try {
+    await fn();
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(`[titan-action:${name}]`, error.message, error.stack);
+    } else {
+      console.error(`[titan-action:${name}]`, error);
+    }
+    throw new Error("TITAN_ACTION_FAILED");
+  }
 }
 
-export async function setActiveTemplateAction(formData: FormData): Promise<void> {
-  await setActiveTemplateRecord(requireString(formData, "template_id"));
-  revalidatePath("/");
+export async function createTemplateAction(formData: FormData): Promise<void> {
+  await runAction("createTemplate", async () => {
+    const title = requireString(formData, "title", FIELD_LIMITS.title);
+
+    await createTemplateRecord({
+      title,
+      summary: requireString(formData, "summary", FIELD_LIMITS.summary),
+      successTarget: requireInteger(
+        formData,
+        "success_target",
+        NUMERIC_LIMITS.successTarget.min,
+        NUMERIC_LIMITS.successTarget.max,
+      ),
+      slugBase: slugify(title),
+    });
+
+    revalidatePath("/");
+  });
+}
+
+export async function setActiveTemplateAction(
+  formData: FormData,
+): Promise<void> {
+  await runAction("setActiveTemplate", async () => {
+    await setActiveTemplateRecord(
+      requireString(formData, "template_id", FIELD_LIMITS.id),
+    );
+    revalidatePath("/");
+  });
 }
 
 export async function createRewardAction(formData: FormData): Promise<void> {
-  const title = requireString(formData, "title");
+  await runAction("createReward", async () => {
+    const title = requireString(formData, "title", FIELD_LIMITS.title);
 
-  await createRewardRecord({
-    title,
-    description: requireString(formData, "description"),
-    rarity: requireRarity(formData, "rarity"),
-    xpCost: requireInteger(formData, "xp_cost", 0),
-    unlocked: readBoolean(formData, "unlocked"),
-    slugBase: slugify(title),
+    await createRewardRecord({
+      title,
+      description: requireString(
+        formData,
+        "description",
+        FIELD_LIMITS.description,
+      ),
+      rarity: requireRarity(formData, "rarity"),
+      xpCost: requireInteger(
+        formData,
+        "xp_cost",
+        NUMERIC_LIMITS.xpCost.min,
+        NUMERIC_LIMITS.xpCost.max,
+      ),
+      unlocked: readBoolean(formData, "unlocked"),
+      slugBase: slugify(title),
+    });
+
+    revalidatePath("/");
   });
-
-  revalidatePath("/");
 }
 
 export async function createQuestAction(formData: FormData): Promise<void> {
-  const type = requireQuestType(formData, "type");
-  const progressKind = requireProgressKind(formData, "progress_kind");
-  const title = requireString(formData, "title");
+  await runAction("createQuest", async () => {
+    const type = requireQuestType(formData, "type");
+    const progressKind = requireProgressKind(formData, "progress_kind");
+    const title = requireString(formData, "title", FIELD_LIMITS.title);
 
-  await createQuestRecord({
-    templateId: requireString(formData, "template_id"),
-    type,
-    progressKind,
-    title,
-    summary: requireString(formData, "summary"),
-    xpValue: requireInteger(formData, "xp_value", 0),
-    rewardId: readOptionalString(formData, "reward_id"),
-    isCore: readBoolean(formData, "is_core"),
-    targetValue:
-      progressKind === "counter"
-        ? readOptionalInteger(formData, "target_value")
-        : null,
-    unit:
-      progressKind === "counter" ? readOptionalString(formData, "unit") : null,
-    slugBase: slugify(title),
+    await createQuestRecord({
+      templateId: requireString(formData, "template_id", FIELD_LIMITS.id),
+      type,
+      progressKind,
+      title,
+      summary: requireString(formData, "summary", FIELD_LIMITS.summary),
+      xpValue: requireInteger(
+        formData,
+        "xp_value",
+        NUMERIC_LIMITS.xpValue.min,
+        NUMERIC_LIMITS.xpValue.max,
+      ),
+      rewardId: readOptionalString(formData, "reward_id", FIELD_LIMITS.id),
+      isCore: readBoolean(formData, "is_core"),
+      targetValue:
+        progressKind === "counter"
+          ? readOptionalInteger(
+              formData,
+              "target_value",
+              NUMERIC_LIMITS.targetValue.min,
+              NUMERIC_LIMITS.targetValue.max,
+            )
+          : null,
+      unit:
+        progressKind === "counter"
+          ? readOptionalString(formData, "unit", FIELD_LIMITS.unit)
+          : null,
+      slugBase: slugify(title),
+    });
+
+    revalidatePath("/");
   });
-
-  revalidatePath("/");
 }
 
 export async function createQuestProgressOptionAction(
   formData: FormData,
 ): Promise<void> {
-  const label = requireString(formData, "label");
+  await runAction("createQuestProgressOption", async () => {
+    const label = requireString(formData, "label", FIELD_LIMITS.label);
 
-  await createQuestProgressOptionRecord({
-    questId: requireString(formData, "quest_id"),
-    label,
-    value: requireInteger(formData, "value", 1),
-    slugBase: slugify(label),
+    await createQuestProgressOptionRecord({
+      questId: requireString(formData, "quest_id", FIELD_LIMITS.id),
+      label,
+      value: requireInteger(
+        formData,
+        "value",
+        NUMERIC_LIMITS.optionValue.min,
+        NUMERIC_LIMITS.optionValue.max,
+      ),
+      slugBase: slugify(label),
+    });
+
+    revalidatePath("/");
   });
-
-  revalidatePath("/");
 }
 
 export async function attachRewardToQuestAction(
   formData: FormData,
 ): Promise<void> {
-  await attachRewardToQuestRecord(
-    requireString(formData, "quest_id"),
-    requireString(formData, "reward_id"),
-  );
+  await runAction("attachRewardToQuest", async () => {
+    await attachRewardToQuestRecord(
+      requireString(formData, "quest_id", FIELD_LIMITS.id),
+      requireString(formData, "reward_id", FIELD_LIMITS.id),
+    );
 
-  revalidatePath("/");
+    revalidatePath("/");
+  });
 }
 
-export async function toggleDailyQuestAction(formData: FormData): Promise<void> {
-  await toggleDailyBooleanQuest(requireString(formData, "quest_id"));
-  revalidatePath("/");
+export async function toggleDailyQuestAction(
+  formData: FormData,
+): Promise<void> {
+  await runAction("toggleDailyQuest", async () => {
+    await toggleDailyBooleanQuest(
+      requireString(formData, "quest_id", FIELD_LIMITS.id),
+    );
+    revalidatePath("/");
+  });
 }
 
 export async function applyQuestProgressOptionAction(
   formData: FormData,
 ): Promise<void> {
-  await applyQuestProgressOption(requireString(formData, "option_id"));
-  revalidatePath("/");
+  await runAction("applyQuestProgressOption", async () => {
+    await applyQuestProgressOption(
+      requireString(formData, "option_id", FIELD_LIMITS.id),
+    );
+    revalidatePath("/");
+  });
 }

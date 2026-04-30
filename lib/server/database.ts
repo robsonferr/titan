@@ -24,9 +24,7 @@ export async function getTitanDatabase(): Promise<TitanDatabase> {
   const database = env.TITAN_DB;
 
   if (!database) {
-    throw new Error(
-      `Cloudflare D1 binding "${TITAN_D1_BINDING}" is not configured for this runtime.`,
-    );
+    throw new Error("TITAN_MISSING_D1_BINDING");
   }
 
   return database;
@@ -77,10 +75,7 @@ export async function executeBatch(
 }
 
 export function isMissingTitanBindingError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.message.includes(`Cloudflare D1 binding "${TITAN_D1_BINDING}"`)
-  );
+  return error instanceof Error && error.message === "TITAN_MISSING_D1_BINDING";
 }
 
 export function isMissingTitanSchemaError(error: unknown): boolean {
