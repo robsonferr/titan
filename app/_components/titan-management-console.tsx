@@ -106,6 +106,7 @@ export function TitanManagementConsole({
                 id="template-title"
                 name="title"
                 required
+                maxLength={120}
                 className="titan-input"
                 placeholder="Balanced Hero"
                 type="text"
@@ -118,6 +119,7 @@ export function TitanManagementConsole({
                 id="template-summary"
                 name="summary"
                 required
+                maxLength={2048}
                 className="titan-textarea"
                 placeholder="Blend study, movement, and reset habits into one daily run."
                 rows={4}
@@ -131,6 +133,8 @@ export function TitanManagementConsole({
                 name="success_target"
                 required
                 min={1}
+                max={100}
+                step={1}
                 className="titan-input"
                 defaultValue={3}
                 type="number"
@@ -156,6 +160,7 @@ export function TitanManagementConsole({
                 id="reward-title"
                 name="title"
                 required
+                maxLength={120}
                 className="titan-input"
                 placeholder="Arcade Pass"
                 type="text"
@@ -168,6 +173,7 @@ export function TitanManagementConsole({
                 id="reward-description"
                 name="description"
                 required
+                maxLength={2048}
                 className="titan-textarea"
                 placeholder="Unlocked after keeping the shield online for a full week."
                 rows={4}
@@ -177,7 +183,7 @@ export function TitanManagementConsole({
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <FieldLabel htmlFor="reward-rarity">Rarity</FieldLabel>
-                <select id="reward-rarity" name="rarity" defaultValue="rare" className="titan-select">
+                <select id="reward-rarity" name="rarity" defaultValue="rare" required className="titan-select">
                   <option value="common">Common</option>
                   <option value="rare">Rare</option>
                   <option value="legendary">Legendary</option>
@@ -191,6 +197,8 @@ export function TitanManagementConsole({
                   name="xp_cost"
                   required
                   min={0}
+                  max={1000000}
+                  step={1}
                   className="titan-input"
                   defaultValue={120}
                   type="number"
@@ -224,6 +232,7 @@ export function TitanManagementConsole({
                     id="quest-template"
                     name="template_id"
                     defaultValue={management.activeTemplateId}
+                    required
                     className="titan-select"
                   >
                     {management.templates.map((template) => (
@@ -236,7 +245,7 @@ export function TitanManagementConsole({
 
                 <div>
                   <FieldLabel htmlFor="quest-type">Quest type</FieldLabel>
-                  <select id="quest-type" name="type" defaultValue="daily" className="titan-select">
+                  <select id="quest-type" name="type" defaultValue="daily" required className="titan-select">
                     <option value="daily">Daily</option>
                     <option value="weekly">Weekly</option>
                     <option value="monthly">Monthly</option>
@@ -252,6 +261,7 @@ export function TitanManagementConsole({
                     id="quest-progress-kind"
                     name="progress_kind"
                     defaultValue="boolean"
+                    required
                     className="titan-select"
                   >
                     <option value="boolean">Boolean</option>
@@ -266,6 +276,8 @@ export function TitanManagementConsole({
                     name="xp_value"
                     required
                     min={0}
+                    max={1000000}
+                    step={1}
                     className="titan-input"
                     defaultValue={20}
                     type="number"
@@ -279,6 +291,7 @@ export function TitanManagementConsole({
                   id="quest-title"
                   name="title"
                   required
+                  maxLength={120}
                   className="titan-input"
                   placeholder="Focus Sprint"
                   type="text"
@@ -291,6 +304,7 @@ export function TitanManagementConsole({
                   id="quest-summary"
                   name="summary"
                   required
+                  maxLength={2048}
                   className="titan-textarea"
                   placeholder="Stack short sessions until the deck clears."
                   rows={4}
@@ -304,6 +318,8 @@ export function TitanManagementConsole({
                     id="quest-target-value"
                     name="target_value"
                     min={0}
+                    max={1000000}
+                    step={1}
                     className="titan-input"
                     placeholder="50"
                     type="number"
@@ -315,6 +331,7 @@ export function TitanManagementConsole({
                   <input
                     id="quest-unit"
                     name="unit"
+                    maxLength={32}
                     className="titan-input"
                     placeholder="min / reps / pages"
                     type="text"
@@ -364,7 +381,7 @@ export function TitanManagementConsole({
               <form action={createQuestProgressOptionAction} className="space-y-4">
                 <div>
                   <FieldLabel htmlFor="option-quest">Counter quest</FieldLabel>
-                  <select id="option-quest" name="quest_id" className="titan-select">
+                  <select id="option-quest" name="quest_id" required className="titan-select">
                     {counterQuests.map((quest) => (
                       <option key={quest.id} value={quest.id}>
                         {quest.templateTitle} - {quest.title}
@@ -380,6 +397,7 @@ export function TitanManagementConsole({
                       id="option-label"
                       name="label"
                       required
+                      maxLength={80}
                       className="titan-input"
                       placeholder="Pomodoro"
                       type="text"
@@ -393,6 +411,8 @@ export function TitanManagementConsole({
                       name="value"
                       required
                       min={1}
+                      max={10000}
+                      step={1}
                       className="titan-input"
                       defaultValue={25}
                       type="number"
@@ -421,7 +441,7 @@ export function TitanManagementConsole({
               <form action={attachRewardToQuestAction} className="space-y-4">
                 <div>
                   <FieldLabel htmlFor="attach-quest">Quest</FieldLabel>
-                  <select id="attach-quest" name="quest_id" className="titan-select">
+                  <select id="attach-quest" name="quest_id" required className="titan-select">
                     {management.quests.map((quest) => (
                       <option key={quest.id} value={quest.id}>
                         {quest.templateTitle} - {quest.title}
@@ -432,7 +452,7 @@ export function TitanManagementConsole({
 
                 <div>
                   <FieldLabel htmlFor="attach-reward">Reward</FieldLabel>
-                  <select id="attach-reward" name="reward_id" className="titan-select">
+                  <select id="attach-reward" name="reward_id" required className="titan-select">
                     {management.rewards.map((reward) => (
                       <option key={reward.id} value={reward.id}>
                         {reward.title}

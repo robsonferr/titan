@@ -27,6 +27,9 @@ function readErrorMessage(value: string | string[] | undefined): string | null {
   if (value === "config") {
     return "Auth não configurada neste runtime.";
   }
+  if (value === "throttled") {
+    return "Muitas tentativas. Tente novamente em alguns minutos.";
+  }
   return null;
 }
 
