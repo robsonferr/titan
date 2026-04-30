@@ -14,7 +14,8 @@
   "d1_databases": [
     {
       "binding": "TITAN_DB",
-      "database_name": "titan",
+      "database_name": "titan-db",
+      "database_id": "38163d58-8008-46f7-8c40-2b6496ca8f41",
       "migrations_dir": "db/migrations"
     }
   ]
