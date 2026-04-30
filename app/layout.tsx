@@ -15,9 +15,9 @@ const saira = Saira({
 });
 
 export const metadata: Metadata = {
-  title: "TITAN // Level Up Your Growth",
+  title: "TITAN // Teen Goals Level Up",
   description:
-    "Mobile-first health gamification dashboard for Morning Buff, Night Protocol, Protein Log, Boss progress, and rewards.",
+    "Mobile-first quest dashboard for gamified teen goals, daily streaks, monthly bosses, and rewards.",
 };
 
 export default function RootLayout({

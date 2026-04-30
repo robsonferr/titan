@@ -1,32 +1,34 @@
-# 🛡️ TITAN: Gamified Pediatric Growth Management
+# 🛡️ TITAN: Gamified Teen Goals
 
-**TITAN** is an open-source, mobile-first WebApp designed to empower adolescents undergoing specialized growth treatments (such as Somatropin/iGH therapy)[cite: 2, 3]. By merging clinical requirements with a high-fidelity gaming experience inspired by titles like *Brawl Stars* and *Fortnite*, TITAN transforms medical compliance into a daily quest for evolution[cite: 2].
+**TITAN** is an open-source, mobile-first WebApp for turning adolescent goals into a game loop. Instead of being locked to one health-treatment routine, TITAN uses structured templates, daily quests, monthly Boss pressure, and loot-style rewards to make consistency feel more like progression than obligation.
 
 ## 🚀 The Mission
-For many adolescents, managing a complex daily routine of hormone applications, specific medications, and high-protein nutritional targets can feel like a chore[cite: 2]. **TITAN** shifts the perspective: the user is no longer a patient, but a **Pilot** managing their own structural "Level Up"[cite: 2].
+
+Adolescents usually juggle study blocks, movement, sleep routines, and personal responsibilities at the same time. **TITAN** reframes that routine as a playable command deck: the user becomes a **Pilot** managing a daily run, protecting streaks, and unlocking rewards through execution.
 
 ## 🎮 Key Features
-*   **Daily Buff System**: Check-in system for morning medications (Anastrozole) and nighttime protocols (iGH) to ensure 100% adherence without parental nagging[cite: 2].
-*   **Protein XP Tracker**: A specialized nutrition log focused on "Structural Bricks." Users log protein blocks (Shakes, Animal Protein, Eggs) to hit a daily 100g XP target[cite: 2, 3].
-*   **Monthly Boss (OKR System)**: Instead of focusing solely on height (which varies in plateaus), TITAN tracks an "Engagement Score." Defeating the Monthly Boss requires >70% consistency in daily habits[cite: 2].
-*   **The Loot Shop**: Integrated reward system where real-world incentives (game time, hobby items, apparel) are unlocked through consistent performance[cite: 2].
-*   **Somatropin Factor (Future)**: Tracking the finite window of the epiphyseal plates (bone age) to create a meaningful sense of urgency[cite: 2, 3].
+
+- **Template-Driven Goals**: The current foundation supports structured templates that define daily core quests, success rules, and long-arc progression.
+- **Daily Quest Log**: Each day is tracked as quest progress, not as hardcoded domain columns, so the same system can power health, study, or sport routines.
+- **Featured Goal Meter**: Incremental quests can expose quick-add progress options like Pomodoro blocks, reading bursts, or similar repeatable actions.
+- **Monthly Boss (OKR System)**: The Boss uses a monthly engagement score and a template-defined success rule to show whether the current routine is holding above the threshold.
+- **The Loot Shop**: Real-world rewards can remain standalone or be linked directly to quests.
 
 ## 🛠️ Tech Stack
-*   **Framework**: [Next.js](https://nextjs.org/) (App Router)
-*   **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-*   **Animations**: [Framer Motion](https://www.framer.com/motion/)
-*   **Deployment**: [Vercel](https://vercel.com/)
-*   **Design System**: Custom "Gamer UI" with a high-contrast palette (#230c0f, #1b4965, #ee4266)[cite: 1, 2].
 
-## 🧬 Scientific Foundation
-The logic behind TITAN is inspired by longitudinal anthropometric studies (such as the *NCD Risk Factor Collaboration* published in **The Lancet**), which highlight the critical correlation between high-quality animal protein intake during the pubertal growth spurt and reaching peak genetic height[cite: 2, 3].
+- **Framework**: [Next.js](https://nextjs.org/) (App Router)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+- **Animations**: [Framer Motion](https://www.framer.com/motion/)
+- **Persistence**: Local SQLite bootstrap with a schema shaped to stay D1-compatible
+- **Design System**: Custom gamer UI with a high-contrast palette (`#230c0f`, `#1b4965`, `#ee4266`, `#ddd8b8`)
 
 ## 🤝 Contributing
+
 As an open-source project, we welcome contributions from:
-*   **Developers**: Help us improve the UX/UI or integrate with health APIs.
-*   **Pediatricians/Endocrinologists**: Provide insights on clinical safety and nutritional guidelines.
-*   **Parents/Gamers**: Suggest new gamification mechanics to keep users engaged.
+
+- **Developers**: Help us improve the UX/UI or expand template and management flows.
+- **Educators / Coaches / Parents**: Suggest templates and reward mechanics that work for adolescent routines.
+- **Designers / Gamers**: Push the interface further into a playful, high-feedback experience.
 
 ## Support
 
@@ -41,7 +43,3 @@ If you find 🛡️ TITAN useful, consider buying me a coffee:
 ## Author
 
 Built with 🤟 by Robson
-
----
-
-*Note: This tool is intended for personal management and should be used under the supervision of a qualified medical professional.*[cite: 2]

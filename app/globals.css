@@ -126,6 +126,55 @@ button {
   color: #ffe7eb;
 }
 
+.titan-input,
+.titan-select,
+.titan-textarea {
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid rgba(221, 216, 184, 0.14);
+  background: linear-gradient(180deg, rgba(13, 8, 10, 0.92), rgba(39, 14, 22, 0.88));
+  color: #fff7de;
+  padding: 0.85rem 1rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
+.titan-textarea {
+  resize: vertical;
+  min-height: 7rem;
+}
+
+.titan-input::placeholder,
+.titan-textarea::placeholder {
+  color: rgba(221, 216, 184, 0.34);
+}
+
+.titan-input:focus,
+.titan-select:focus,
+.titan-textarea:focus {
+  outline: 2px solid rgba(238, 66, 102, 0.35);
+  outline-offset: 2px;
+}
+
+.titan-check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  border-radius: 18px;
+  border: 1px solid rgba(221, 216, 184, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.9rem 1rem;
+  color: var(--titan-text);
+  font-size: 0.92rem;
+}
+
+.titan-checkbox {
+  height: 1rem;
+  width: 1rem;
+  accent-color: var(--titan-action);
+}
+
 .safe-bottom {
   padding-bottom: max(5.5rem, env(safe-area-inset-bottom));
 }

@@ -8,6 +8,7 @@ interface MonthlyBossWidgetProps {
   threshold: number;
   completedDays: number;
   totalDays: number;
+  successRuleLabel: string;
 }
 
 export function MonthlyBossWidget({
@@ -16,6 +17,7 @@ export function MonthlyBossWidget({
   threshold,
   completedDays,
   totalDays,
+  successRuleLabel,
 }: MonthlyBossWidgetProps): React.JSX.Element {
   const percentage = Math.round(engagementScore * 100);
   const thresholdPercent = Math.round(threshold * 100);
@@ -29,7 +31,7 @@ export function MonthlyBossWidget({
         <div>
           <p className="section-kicker">Monthly Boss</p>
           <h3 className="mt-2 text-xl font-semibold text-[#fff7de]">
-            OKR shield integrity
+            Consistency shield
           </h3>
         </div>
         <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--titan-muted)]">
@@ -61,10 +63,11 @@ export function MonthlyBossWidget({
             successful days out of{" "}
             <span className="font-semibold text-[#fff7de]">{totalDays}</span>.
           </p>
+          <p>{successRuleLabel}</p>
           <p>
             Threshold is{" "}
             <span className="font-semibold text-[#fff7de]">{thresholdPercent}%</span>{" "}
-            to defeat the Boss.
+            to clear this Boss.
           </p>
           <div className="inline-flex rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[#b4ffd8]">
             {percentage >= thresholdPercent ? "Shield up" : "Recovering"}

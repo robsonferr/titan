@@ -32,8 +32,7 @@ const itemVariants: Variants = {
 };
 
 const rarityStyles: Record<Reward["rarity"], string> = {
-  common:
-    "border-white/12 bg-white/6 text-[var(--titan-text)]",
+  common: "border-white/12 bg-white/6 text-[var(--titan-text)]",
   rare: "border-sky-300/20 bg-sky-300/10 text-sky-100",
   legendary: "border-pink-300/20 bg-pink-300/10 text-pink-100",
 };
@@ -49,11 +48,12 @@ const navItems = [
   { label: "HUD", active: true },
   { label: "Quests", active: false },
   { label: "Boss", active: false },
-  { label: "Shop", active: false },
+  { label: "Forge", active: false },
 ] as const;
 
 interface TitanDashboardProps {
   snapshot: DashboardSnapshot;
+  children?: React.ReactNode;
 }
 
 function QuestCard({ quest }: { quest: Quest }): React.JSX.Element {
@@ -105,7 +105,7 @@ function QuestCard({ quest }: { quest: Quest }): React.JSX.Element {
         }`}
         type="button"
       >
-        {quest.completed ? "Completed" : "Open quest"}
+        {quest.completed ? "Quest cleared" : "Open quest"}
       </motion.button>
     </motion.article>
   );
@@ -180,11 +180,10 @@ function SectionHeader({
 
 export function TitanDashboard({
   snapshot,
+  children,
 }: TitanDashboardProps): React.JSX.Element {
-  const proteinPercent = Math.round(
-    (snapshot.dailyLog.protein_total / snapshot.proteinGoal) * 100,
-  );
   const bossPercent = Math.round(snapshot.monthlyBoss.engagementScore * 100);
+  const coreProgressLabel = `${snapshot.dailyLog.completedCoreQuests}/${snapshot.dailyLog.totalCoreQuests}`;
 
   return (
     <main className="safe-bottom relative mx-auto flex min-h-screen w-full max-w-md flex-col px-4 py-6 sm:max-w-2xl sm:px-6">
@@ -200,13 +199,12 @@ export function TitanDashboard({
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="section-kicker">Phase 1 // UI shell</p>
+              <p className="section-kicker">Phase 3 // Management forge</p>
               <h1 className="score-text mt-3 text-[clamp(2.4rem,8vw,4rem)] leading-none text-[#fff7de]">
                 TITAN
               </h1>
               <p className="mt-3 max-w-[18rem] text-sm leading-6 text-[var(--titan-muted)]">
-                A mobile command deck for daily health quests, shop rewards, and
-                Boss pressure.
+                {snapshot.activeTemplate.summary}
               </p>
             </div>
 
@@ -215,12 +213,16 @@ export function TitanDashboard({
                 Pilot
               </p>
               <p className="mt-2 text-lg font-semibold text-[#fff7de]">
-                {snapshot.pilotName}
+                {snapshot.playerName}
               </p>
               <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[var(--titan-muted)]">
                 {snapshot.todayLabel}
               </p>
             </div>
+          </div>
+
+          <div className="mt-5 inline-flex rounded-full border border-white/10 bg-white/6 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#fff7de]">
+            Active template // {snapshot.activeTemplate.title}
           </div>
 
           <div className="mt-6 grid grid-cols-3 gap-3">
@@ -231,9 +233,9 @@ export function TitanDashboard({
               </p>
             </div>
             <div className="rounded-[22px] border border-white/10 bg-black/18 p-3">
-              <p className="section-kicker">Protein</p>
+              <p className="section-kicker">Core</p>
               <p className="score-text mt-2 text-3xl text-[#fff7de]">
-                {proteinPercent}
+                {coreProgressLabel}
               </p>
             </div>
             <div className="rounded-[22px] border border-white/10 bg-black/18 p-3">
@@ -249,34 +251,40 @@ export function TitanDashboard({
           <MonthlyBossWidget {...snapshot.monthlyBoss} />
         </motion.section>
 
-        <motion.section variants={itemVariants}>
-          <TitanProgressBar
-            current={snapshot.dailyLog.protein_total}
-            goal={snapshot.proteinGoal}
-          />
-          <div className="mt-3 grid grid-cols-3 gap-3">
-            {snapshot.proteinOptions.map((option) => (
-              <div
-                key={option.id}
-                className="panel rounded-[22px] p-3 text-center"
-              >
-                <p className="section-kicker">{option.label}</p>
-                <p className="score-text mt-2 text-2xl text-[#fff7de]">
-                  +{option.grams}
-                </p>
-                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[var(--titan-muted)]">
-                  x{option.usesToday} today
-                </p>
-              </div>
-            ))}
-          </div>
-        </motion.section>
+        {snapshot.featuredGoal ? (
+          <motion.section variants={itemVariants}>
+            <TitanProgressBar
+              kicker="Featured Goal"
+              title={snapshot.featuredGoal.title}
+              caption={snapshot.featuredGoal.summary}
+              current={snapshot.featuredGoal.current}
+              goal={snapshot.featuredGoal.goal}
+              unit={snapshot.featuredGoal.unit}
+            />
+            <div className="mt-3 grid grid-cols-3 gap-3">
+              {snapshot.featuredGoal.options.map((option) => (
+                <div
+                  key={option.id}
+                  className="panel rounded-[22px] p-3 text-center"
+                >
+                  <p className="section-kicker">{option.label}</p>
+                  <p className="score-text mt-2 text-2xl text-[#fff7de]">
+                    +{option.value}
+                  </p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[var(--titan-muted)]">
+                    x{option.usesToday} today
+                  </p>
+                </div>
+              ))}
+            </div>
+          </motion.section>
+        ) : null}
 
         <motion.section variants={itemVariants}>
           <SectionHeader
             eyebrow="Today run"
             title="Daily Quests"
-            caption="The four core tasks that feed the OKR rule."
+            caption={snapshot.activeTemplate.successRuleLabel}
           />
           <div className="grid gap-4">
             {snapshot.dailyQuests.map((quest) => (
@@ -289,7 +297,7 @@ export function TitanDashboard({
           <SectionHeader
             eyebrow="Secondary lanes"
             title="Weekly + Monthly + Epic"
-            caption="These shape the future management screens."
+            caption="The template still drives the medium and long arcs."
           />
           <div className="grid gap-4">
             {[
@@ -315,35 +323,7 @@ export function TitanDashboard({
           </div>
         </motion.section>
 
-        <motion.section
-          variants={itemVariants}
-          className="panel rounded-[30px] p-5"
-        >
-          <SectionHeader
-            eyebrow="Quest forge"
-            title="Management shell"
-            caption="This stays visual-only in phase 1."
-          />
-          <div className="grid gap-3 sm:grid-cols-2">
-            {[
-              "Create Daily Quest",
-              "Create Weekly Quest",
-              "Create Monthly Boss",
-              "Create Epic Quest",
-              "Create Reward",
-              "Attach Reward to Quest",
-            ].map((label) => (
-              <motion.button
-                key={label}
-                whileTap={{ scale: 0.98 }}
-                type="button"
-                className="neo-button rounded-[20px] px-4 py-4 text-left text-sm font-semibold uppercase tracking-[0.16em] text-[#fff7de]"
-              >
-                {label}
-              </motion.button>
-            ))}
-          </div>
-        </motion.section>
+        {children ? <motion.section variants={itemVariants}>{children}</motion.section> : null}
 
         <motion.nav
           variants={itemVariants}
