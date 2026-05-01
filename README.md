@@ -1,5 +1,12 @@
 # 🛡️ TITAN: Gamified Teen Goals
 
+![release](https://img.shields.io/badge/release-stable--v2026.4.30-3b82f6?style=flat-square)
+![CI](https://img.shields.io/badge/CI-passing-22c55e?style=flat-square&logo=github&logoColor=white)
+![Cloudflare](https://img.shields.io/badge/Workers%20%2B%20D1-deployed-f38020?style=flat-square&logo=cloudflare&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16.2-000000?style=flat-square&logo=nextdotjs&logoColor=white)
+![security](https://img.shields.io/badge/security%20audit-P0%2FP1%20closed-22c55e?style=flat-square)
+![license](https://img.shields.io/badge/license-MIT-a78bfa?style=flat-square)
+
 **TITAN** is an open-source, mobile-first WebApp for turning adolescent goals into a game loop. Instead of being locked to one health-treatment routine, TITAN uses structured templates, daily quests, monthly Boss pressure, and loot-style rewards to make consistency feel more like progression than obligation.
 
 ## 🚀 The Mission
