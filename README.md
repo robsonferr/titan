@@ -41,6 +41,14 @@ npm run dev
 
 Use `npm run preview` when you want to validate the app inside the actual Workers runtime instead of the standard Next.js dev server.
 
+If you want to bypass authentication during `next dev`, start it with:
+
+```bash
+TITAN_DEV_AUTH_BYPASS=1 npm run dev
+```
+
+This bypass only works outside production and only when the flag is set explicitly.
+
 ## D1 workflow
 
 ```bash

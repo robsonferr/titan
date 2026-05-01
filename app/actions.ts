@@ -1,8 +1,15 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import {
+  buildLocalizedPath,
+  getLocaleFromAbsoluteUrl,
+  type Locale,
+  SUPPORTED_LOCALES,
+} from "@/lib/i18n";
 import type { QuestProgressKind, QuestType, RewardRarity } from "@/lib/titan";
 import { getAuthSession } from "@/lib/server/auth";
 import {
@@ -176,6 +183,10 @@ async function runAction(
   name: string,
   fn: () => Promise<void>,
 ): Promise<void> {
+  const headerStore = await headers();
+  const referer = headerStore.get("referer");
+  const locale = getLocaleFromAbsoluteUrl(referer);
+  const currentPath = readActionTarget(referer, locale);
   let session;
   try {
     session = await getAuthSession();
@@ -185,7 +196,7 @@ async function runAction(
   }
 
   if (!session) {
-    redirect("/login");
+    redirect(buildLoginRedirect(locale, currentPath));
   }
 
   try {
@@ -197,6 +208,30 @@ async function runAction(
       console.error(`[titan-action:${name}]`, error);
     }
     throw new Error("TITAN_ACTION_FAILED");
+  }
+}
+
+function buildLoginRedirect(locale: Locale, target: string): string {
+  return `${buildLocalizedPath(locale, "/login")}?redirect=${encodeURIComponent(target)}`;
+}
+
+function readActionTarget(referer: string | null, locale: Locale): string {
+  if (!referer) {
+    return buildLocalizedPath(locale);
+  }
+
+  try {
+    const url = new URL(referer);
+    const target = `${url.pathname}${url.search}`;
+    return target || buildLocalizedPath(locale);
+  } catch {
+    return buildLocalizedPath(locale);
+  }
+}
+
+function revalidateLocalizedDashboard(): void {
+  for (const locale of SUPPORTED_LOCALES) {
+    revalidatePath(buildLocalizedPath(locale));
   }
 }
 
@@ -216,7 +251,7 @@ export async function createTemplateAction(formData: FormData): Promise<void> {
       slugBase: slugify(title),
     });
 
-    revalidatePath("/");
+    revalidateLocalizedDashboard();
   });
 }
 
@@ -227,7 +262,7 @@ export async function setActiveTemplateAction(
     await setActiveTemplateRecord(
       requireString(formData, "template_id", FIELD_LIMITS.id),
     );
-    revalidatePath("/");
+    revalidateLocalizedDashboard();
   });
 }
 
@@ -253,7 +288,7 @@ export async function createRewardAction(formData: FormData): Promise<void> {
       slugBase: slugify(title),
     });
 
-    revalidatePath("/");
+    revalidateLocalizedDashboard();
   });
 }
 
@@ -293,7 +328,7 @@ export async function createQuestAction(formData: FormData): Promise<void> {
       slugBase: slugify(title),
     });
 
-    revalidatePath("/");
+    revalidateLocalizedDashboard();
   });
 }
 
@@ -315,7 +350,7 @@ export async function createQuestProgressOptionAction(
       slugBase: slugify(label),
     });
 
-    revalidatePath("/");
+    revalidateLocalizedDashboard();
   });
 }
 
@@ -328,7 +363,7 @@ export async function attachRewardToQuestAction(
       requireString(formData, "reward_id", FIELD_LIMITS.id),
     );
 
-    revalidatePath("/");
+    revalidateLocalizedDashboard();
   });
 }
 
@@ -339,7 +374,7 @@ export async function toggleDailyQuestAction(
     await toggleDailyBooleanQuest(
       requireString(formData, "quest_id", FIELD_LIMITS.id),
     );
-    revalidatePath("/");
+    revalidateLocalizedDashboard();
   });
 }
 

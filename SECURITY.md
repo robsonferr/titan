@@ -53,7 +53,7 @@ A app **não pode** rodar com segurança a menos que:
 | Camada            | Mecanismo                                                                 |
 |-------------------|---------------------------------------------------------------------------|
 | Autenticação      | Senha única + cookie HttpOnly assinado (HMAC-SHA256), TTL 30 dias.        |
-| Autorização       | `middleware.ts` redireciona para `/login`; cada Server Action revalida.   |
+| Autorização       | `proxy.ts` redireciona para `/login`; cada Server Action revalida.        |
 | Anti-brute-force  | D1 `login_attempts`: 5 falhas em 15 min → lockout de 15 min por IP.       |
 | SQL injection     | Prepared statements em todas as queries; identificadores via whitelist.   |
 | XSS / clickjacking| CSP estrita, `X-Frame-Options: DENY`, `frame-ancestors 'none'`.           |
@@ -66,8 +66,10 @@ A app **não pode** rodar com segurança a menos que:
 ## Limitações conhecidas
 
 - **CSP usa `'unsafe-inline'`** em `script-src` e `style-src` por compatibilidade
-  com a hidratação do Next.js e estilos inline do framer-motion. Pode evoluir
-  para nonces no futuro.
+  com a hidratação do Next.js e estilos inline do framer-motion. Em
+  desenvolvimento local, `script-src` também inclui `'unsafe-eval'` porque o
+  React/Next precisa disso para debugging; em produção, esse relaxamento não é
+  enviado.
 - **Rate limit é por IP**. Atrás de NAT compartilhado, vários usuários podem
   somar falhas. Aceitável para o cenário pessoal.
 - **Sem auditoria** de mutações por enquanto; ver pendência em

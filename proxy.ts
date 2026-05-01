@@ -2,11 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import {
+  buildLocalizedPath,
+  getLocaleFromPathname,
+  LOCALE_HEADER,
+  resolveLocale,
+  stripLocaleFromPathname,
+} from "@/lib/i18n";
+import {
   SESSION_COOKIE_NAME,
   verifySessionToken,
 } from "@/lib/auth-token";
-
-const PUBLIC_PATHS = new Set(["/login"]);
+import { isDevAuthBypassEnabled } from "@/lib/dev-auth";
 
 interface MiddlewareEnv {
   AUTH_SESSION_SECRET?: string;
@@ -21,29 +27,47 @@ async function readSessionSecret(): Promise<string | null> {
   }
 }
 
-function isPublicPath(pathname: string): boolean {
-  if (PUBLIC_PATHS.has(pathname)) {
-    return true;
-  }
-  return false;
+function withLocaleHeader(
+  request: NextRequest,
+  locale = resolveLocale(getLocaleFromPathname(request.nextUrl.pathname)),
+): NextResponse {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(LOCALE_HEADER, locale);
+
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 }
 
 function buildLoginRedirect(request: NextRequest): NextResponse {
-  const loginUrl = new URL("/login", request.url);
+  const locale = resolveLocale(getLocaleFromPathname(request.nextUrl.pathname));
+  const loginUrl = new URL(buildLocalizedPath(locale, "/login"), request.url);
   const target = `${request.nextUrl.pathname}${request.nextUrl.search}`;
-  if (target && target !== "/") {
+  if (target && target !== buildLocalizedPath(locale)) {
     loginUrl.searchParams.set("redirect", target);
   }
   const response = NextResponse.redirect(loginUrl);
   response.cookies.delete(SESSION_COOKIE_NAME);
+  response.headers.set(LOCALE_HEADER, locale);
   return response;
 }
 
-export async function middleware(
+export async function proxy(
   request: NextRequest,
 ): Promise<NextResponse> {
-  if (isPublicPath(request.nextUrl.pathname)) {
-    return NextResponse.next();
+  if (isDevAuthBypassEnabled()) {
+    return withLocaleHeader(request);
+  }
+
+  const locale = getLocaleFromPathname(request.nextUrl.pathname);
+  if (!locale) {
+    return withLocaleHeader(request);
+  }
+
+  if (stripLocaleFromPathname(request.nextUrl.pathname) === "/login") {
+    return withLocaleHeader(request, locale);
   }
 
   const secret = await readSessionSecret();
@@ -61,7 +85,7 @@ export async function middleware(
     return buildLoginRedirect(request);
   }
 
-  return NextResponse.next();
+  return withLocaleHeader(request, locale);
 }
 
 export const config = {

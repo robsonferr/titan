@@ -8,9 +8,17 @@ import {
 } from "@/app/actions";
 import { TitanEmptyPanel } from "@/app/_components/titan-empty-panel";
 import { TitanSubmitButton } from "@/app/_components/titan-submit-button";
+import {
+  formatProgressKindLabel,
+  formatQuestTypeLabel,
+  formatRewardRarityLabel,
+  getMessages,
+  type Locale,
+} from "@/lib/i18n";
 import type { ManagementSnapshot } from "@/lib/titan";
 
 interface TitanManagementConsoleProps {
+  locale: Locale;
   management: ManagementSnapshot;
 }
 
@@ -72,8 +80,10 @@ function FieldLabel({
 }
 
 export function TitanManagementConsole({
+  locale,
   management,
 }: TitanManagementConsoleProps): React.JSX.Element {
+  const messages = getMessages(locale);
   const counterQuests = management.quests.filter(
     (quest) => quest.progressKind === "counter",
   );
@@ -89,45 +99,51 @@ export function TitanManagementConsole({
       <div className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-[#ee4266] to-transparent" />
 
       <ForgeHeader
-        kicker="Quest forge"
-        title="Management deck"
-        caption="Phase 3 is live: templates, quests, rewards, and links now ship through real forms."
+        kicker={messages.management.kicker}
+        title={messages.management.title}
+        caption={messages.management.caption}
       />
 
       <div className="grid gap-4 xl:grid-cols-2">
         <FormFrame
-          title="Template forge"
-          subtitle="Shape the run"
+          title={messages.management.templateForgeTitle}
+          subtitle={messages.management.templateForgeSubtitle}
         >
           <form action={createTemplateAction} className="space-y-4">
             <div>
-              <FieldLabel htmlFor="template-title">Template title</FieldLabel>
+              <FieldLabel htmlFor="template-title">
+                {messages.management.templateTitleLabel}
+              </FieldLabel>
               <input
                 id="template-title"
                 name="title"
                 required
                 maxLength={120}
                 className="titan-input"
-                placeholder="Balanced Hero"
+                placeholder={messages.management.templateTitlePlaceholder}
                 type="text"
               />
             </div>
 
             <div>
-              <FieldLabel htmlFor="template-summary">Template summary</FieldLabel>
+              <FieldLabel htmlFor="template-summary">
+                {messages.management.templateSummaryLabel}
+              </FieldLabel>
               <textarea
                 id="template-summary"
                 name="summary"
                 required
                 maxLength={2048}
                 className="titan-textarea"
-                placeholder="Blend study, movement, and reset habits into one daily run."
+                placeholder={messages.management.templateSummaryPlaceholder}
                 rows={4}
               />
             </div>
 
             <div>
-              <FieldLabel htmlFor="template-success-target">Daily clear rule</FieldLabel>
+              <FieldLabel htmlFor="template-success-target">
+                {messages.management.dailyClearRuleLabel}
+              </FieldLabel>
               <input
                 id="template-success-target"
                 name="success_target"
@@ -142,56 +158,64 @@ export function TitanManagementConsole({
             </div>
 
             <TitanSubmitButton
-              idleLabel="Create template"
-              pendingLabel="Forging template..."
+              idleLabel={messages.management.createTemplate}
+              pendingLabel={messages.management.creatingTemplate}
               className="neo-button w-full rounded-full px-4 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#fff7de]"
             />
           </form>
         </FormFrame>
 
         <FormFrame
-          title="Reward forge"
-          subtitle="Stock the loot room"
+          title={messages.management.rewardForgeTitle}
+          subtitle={messages.management.rewardForgeSubtitle}
         >
           <form action={createRewardAction} className="space-y-4">
             <div>
-              <FieldLabel htmlFor="reward-title">Reward title</FieldLabel>
+              <FieldLabel htmlFor="reward-title">
+                {messages.management.rewardTitleLabel}
+              </FieldLabel>
               <input
                 id="reward-title"
                 name="title"
                 required
                 maxLength={120}
                 className="titan-input"
-                placeholder="Arcade Pass"
+                placeholder={messages.management.rewardTitlePlaceholder}
                 type="text"
               />
             </div>
 
             <div>
-              <FieldLabel htmlFor="reward-description">Reward description</FieldLabel>
+              <FieldLabel htmlFor="reward-description">
+                {messages.management.rewardDescriptionLabel}
+              </FieldLabel>
               <textarea
                 id="reward-description"
                 name="description"
                 required
                 maxLength={2048}
                 className="titan-textarea"
-                placeholder="Unlocked after keeping the shield online for a full week."
+                placeholder={messages.management.rewardDescriptionPlaceholder}
                 rows={4}
               />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <FieldLabel htmlFor="reward-rarity">Rarity</FieldLabel>
+                <FieldLabel htmlFor="reward-rarity">
+                  {messages.management.rarityLabel}
+                </FieldLabel>
                 <select id="reward-rarity" name="rarity" defaultValue="rare" required className="titan-select">
-                  <option value="common">Common</option>
-                  <option value="rare">Rare</option>
-                  <option value="legendary">Legendary</option>
+                  <option value="common">{formatRewardRarityLabel(locale, "common")}</option>
+                  <option value="rare">{formatRewardRarityLabel(locale, "rare")}</option>
+                  <option value="legendary">{formatRewardRarityLabel(locale, "legendary")}</option>
                 </select>
               </div>
 
               <div>
-                <FieldLabel htmlFor="reward-xp-cost">XP cost</FieldLabel>
+                <FieldLabel htmlFor="reward-xp-cost">
+                  {messages.management.xpCostLabel}
+                </FieldLabel>
                 <input
                   id="reward-xp-cost"
                   name="xp_cost"
@@ -208,26 +232,28 @@ export function TitanManagementConsole({
 
             <label className="titan-check-row">
               <input type="checkbox" name="unlocked" className="titan-checkbox" />
-              <span>Spawn unlocked in the shop</span>
+              <span>{messages.management.spawnUnlocked}</span>
             </label>
 
             <TitanSubmitButton
-              idleLabel="Create reward"
-              pendingLabel="Forging reward..."
+              idleLabel={messages.management.createReward}
+              pendingLabel={messages.management.creatingReward}
               className="neo-button w-full rounded-full px-4 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#fff7de]"
             />
           </form>
         </FormFrame>
 
         <FormFrame
-          title="Quest forge"
-          subtitle="Build the loop"
+          title={messages.management.questForgeTitle}
+          subtitle={messages.management.questForgeSubtitle}
         >
           {canCreateQuest ? (
             <form action={createQuestAction} className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <FieldLabel htmlFor="quest-template">Template</FieldLabel>
+                  <FieldLabel htmlFor="quest-template">
+                    {messages.management.templateLabel}
+                  </FieldLabel>
                   <select
                     id="quest-template"
                     name="template_id"
@@ -244,19 +270,23 @@ export function TitanManagementConsole({
                 </div>
 
                 <div>
-                  <FieldLabel htmlFor="quest-type">Quest type</FieldLabel>
+                  <FieldLabel htmlFor="quest-type">
+                    {messages.management.questTypeLabel}
+                  </FieldLabel>
                   <select id="quest-type" name="type" defaultValue="daily" required className="titan-select">
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                    <option value="epic">Epic</option>
+                    <option value="daily">{formatQuestTypeLabel(locale, "daily")}</option>
+                    <option value="weekly">{formatQuestTypeLabel(locale, "weekly")}</option>
+                    <option value="monthly">{formatQuestTypeLabel(locale, "monthly")}</option>
+                    <option value="epic">{formatQuestTypeLabel(locale, "epic")}</option>
                   </select>
                 </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <FieldLabel htmlFor="quest-progress-kind">Progress mode</FieldLabel>
+                  <FieldLabel htmlFor="quest-progress-kind">
+                    {messages.management.progressModeLabel}
+                  </FieldLabel>
                   <select
                     id="quest-progress-kind"
                     name="progress_kind"
@@ -264,13 +294,15 @@ export function TitanManagementConsole({
                     required
                     className="titan-select"
                   >
-                    <option value="boolean">Boolean</option>
-                    <option value="counter">Counter</option>
+                    <option value="boolean">{formatProgressKindLabel(locale, "boolean")}</option>
+                    <option value="counter">{formatProgressKindLabel(locale, "counter")}</option>
                   </select>
                 </div>
 
                 <div>
-                  <FieldLabel htmlFor="quest-xp-value">XP value</FieldLabel>
+                  <FieldLabel htmlFor="quest-xp-value">
+                    {messages.management.xpValueLabel}
+                  </FieldLabel>
                   <input
                     id="quest-xp-value"
                     name="xp_value"
@@ -286,34 +318,40 @@ export function TitanManagementConsole({
               </div>
 
               <div>
-                <FieldLabel htmlFor="quest-title">Quest title</FieldLabel>
+                <FieldLabel htmlFor="quest-title">
+                  {messages.management.questTitleLabel}
+                </FieldLabel>
                 <input
                   id="quest-title"
                   name="title"
                   required
                   maxLength={120}
                   className="titan-input"
-                  placeholder="Focus Sprint"
+                  placeholder={messages.management.questTitlePlaceholder}
                   type="text"
                 />
               </div>
 
               <div>
-                <FieldLabel htmlFor="quest-summary">Quest summary</FieldLabel>
+                <FieldLabel htmlFor="quest-summary">
+                  {messages.management.questSummaryLabel}
+                </FieldLabel>
                 <textarea
                   id="quest-summary"
                   name="summary"
                   required
                   maxLength={2048}
                   className="titan-textarea"
-                  placeholder="Stack short sessions until the deck clears."
+                  placeholder={messages.management.questSummaryPlaceholder}
                   rows={4}
                 />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <FieldLabel htmlFor="quest-target-value">Target value</FieldLabel>
+                  <FieldLabel htmlFor="quest-target-value">
+                    {messages.management.targetValueLabel}
+                  </FieldLabel>
                   <input
                     id="quest-target-value"
                     name="target_value"
@@ -327,22 +365,26 @@ export function TitanManagementConsole({
                 </div>
 
                 <div>
-                  <FieldLabel htmlFor="quest-unit">Unit</FieldLabel>
+                  <FieldLabel htmlFor="quest-unit">
+                    {messages.management.unitLabel}
+                  </FieldLabel>
                   <input
                     id="quest-unit"
                     name="unit"
                     maxLength={32}
                     className="titan-input"
-                    placeholder="min / reps / pages"
+                    placeholder={messages.management.unitPlaceholder}
                     type="text"
                   />
                 </div>
               </div>
 
               <div>
-                <FieldLabel htmlFor="quest-reward">Attach reward on spawn</FieldLabel>
+                <FieldLabel htmlFor="quest-reward">
+                  {messages.management.attachRewardOnSpawnLabel}
+                </FieldLabel>
                 <select id="quest-reward" name="reward_id" defaultValue="" className="titan-select">
-                  <option value="">No reward yet</option>
+                  <option value="">{messages.management.noRewardYet}</option>
                   {management.rewards.map((reward) => (
                     <option key={reward.id} value={reward.id}>
                       {reward.title}
@@ -353,34 +395,36 @@ export function TitanManagementConsole({
 
               <label className="titan-check-row">
                 <input type="checkbox" name="is_core" className="titan-checkbox" />
-                <span>Count as a core quest for the daily clear rule</span>
+                <span>{messages.management.countAsCore}</span>
               </label>
 
               <TitanSubmitButton
-                idleLabel="Create quest"
-                pendingLabel="Forging quest..."
+                idleLabel={messages.management.createQuest}
+                pendingLabel={messages.management.creatingQuest}
                 className="neo-button w-full rounded-full px-4 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#fff7de]"
               />
             </form>
           ) : (
             <TitanEmptyPanel
-              kicker="Quest forge"
-              title="Create a Template first"
-              description="Quests need a template anchor before they can enter the run. Forge the first template in the left deck, then come back here."
-              hint="Template forge stays live even when the rest of the deck is empty."
+              kicker={messages.management.questForgeTitle}
+              title={messages.management.createTemplateFirst}
+              description={messages.management.createTemplateFirstDescription}
+              hint={messages.management.createTemplateFirstHint}
             />
           )}
         </FormFrame>
 
         <FormFrame
-          title="Link dock"
-          subtitle="Tune progression"
+          title={messages.management.linkDockTitle}
+          subtitle={messages.management.linkDockSubtitle}
         >
           <div className="space-y-5">
             {canCreateProgressOption ? (
               <form action={createQuestProgressOptionAction} className="space-y-4">
                 <div>
-                  <FieldLabel htmlFor="option-quest">Counter quest</FieldLabel>
+                  <FieldLabel htmlFor="option-quest">
+                    {messages.management.counterQuestLabel}
+                  </FieldLabel>
                   <select id="option-quest" name="quest_id" required className="titan-select">
                     {counterQuests.map((quest) => (
                       <option key={quest.id} value={quest.id}>
@@ -392,20 +436,24 @@ export function TitanManagementConsole({
 
                 <div className="grid gap-4 sm:grid-cols-[1fr_120px]">
                   <div>
-                    <FieldLabel htmlFor="option-label">Quick-add label</FieldLabel>
+                    <FieldLabel htmlFor="option-label">
+                      {messages.management.quickAddLabel}
+                    </FieldLabel>
                     <input
                       id="option-label"
                       name="label"
                       required
                       maxLength={80}
                       className="titan-input"
-                      placeholder="Pomodoro"
+                      placeholder={messages.management.quickAddPlaceholder}
                       type="text"
                     />
                   </div>
 
                   <div>
-                    <FieldLabel htmlFor="option-value">Value</FieldLabel>
+                    <FieldLabel htmlFor="option-value">
+                      {messages.management.valueLabel}
+                    </FieldLabel>
                     <input
                       id="option-value"
                       name="value"
@@ -421,17 +469,17 @@ export function TitanManagementConsole({
                 </div>
 
                 <TitanSubmitButton
-                  idleLabel="Add quick progress option"
-                  pendingLabel="Forging burst..."
+                  idleLabel={messages.management.addQuickProgressOption}
+                  pendingLabel={messages.management.addingBurst}
                   className="neo-button w-full rounded-full px-4 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#fff7de]"
                 />
               </form>
             ) : (
               <TitanEmptyPanel
-                kicker="Link dock"
-                title="No counter quests to wire"
-                description="Quick-add bursts only work for counter quests. Forge at least one counter quest with a target value, then add its preset buttons here."
-                hint="Protein Log is a strong candidate for burst presets."
+                kicker={messages.management.linkDockTitle}
+                title={messages.management.noCounterQuestsTitle}
+                description={messages.management.noCounterQuestsDescription}
+                hint={messages.management.noCounterQuestsHint}
               />
             )}
 
@@ -440,7 +488,9 @@ export function TitanManagementConsole({
             {canAttachReward ? (
               <form action={attachRewardToQuestAction} className="space-y-4">
                 <div>
-                  <FieldLabel htmlFor="attach-quest">Quest</FieldLabel>
+                  <FieldLabel htmlFor="attach-quest">
+                    {messages.management.questLabel}
+                  </FieldLabel>
                   <select id="attach-quest" name="quest_id" required className="titan-select">
                     {management.quests.map((quest) => (
                       <option key={quest.id} value={quest.id}>
@@ -451,7 +501,9 @@ export function TitanManagementConsole({
                 </div>
 
                 <div>
-                  <FieldLabel htmlFor="attach-reward">Reward</FieldLabel>
+                  <FieldLabel htmlFor="attach-reward">
+                    {messages.management.rewardLabel}
+                  </FieldLabel>
                   <select id="attach-reward" name="reward_id" required className="titan-select">
                     {management.rewards.map((reward) => (
                       <option key={reward.id} value={reward.id}>
@@ -462,16 +514,16 @@ export function TitanManagementConsole({
                 </div>
 
                 <TitanSubmitButton
-                  idleLabel="Attach reward to quest"
-                  pendingLabel="Linking reward..."
+                  idleLabel={messages.management.attachRewardToQuest}
+                  pendingLabel={messages.management.attachingReward}
                   className="neo-button w-full rounded-full px-4 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#fff7de]"
                 />
               </form>
             ) : (
               <TitanEmptyPanel
-                kicker="Link dock"
-                title="Need both quests and rewards"
-                description="Reward links only become available once the deck has at least one quest and one reward. Forge both sides, then connect them here."
+                kicker={messages.management.linkDockTitle}
+                title={messages.management.needQuestsAndRewardsTitle}
+                description={messages.management.needQuestsAndRewardsDescription}
               />
             )}
           </div>
@@ -481,9 +533,9 @@ export function TitanManagementConsole({
       <div className="mt-6 grid gap-4 lg:grid-cols-2 xl:grid-cols-[1.05fr_1.2fr_0.95fr]">
         <div className="panel rounded-[28px] p-4">
           <ForgeHeader
-            kicker="Templates"
-            title="Live roster"
-            caption="Activate a template to swap the dashboard context instantly."
+            kicker={messages.management.templatesKicker}
+            title={messages.management.templatesTitle}
+            caption={messages.management.templatesCaption}
           />
           {hasTemplates ? (
             <div className="grid gap-3">
@@ -497,19 +549,19 @@ export function TitanManagementConsole({
                       </p>
                     </div>
                     <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${template.isActive ? "border border-emerald-300/20 bg-emerald-300/10 text-[#b4ffd8]" : "border border-white/10 bg-white/6 text-[var(--titan-muted)]"}`}>
-                      {template.isActive ? "Active" : "Idle"}
+                      {template.isActive ? messages.enums.active : messages.enums.idle}
                     </span>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.18em] text-[var(--titan-muted)]">
                     <span className="rounded-full border border-white/10 px-3 py-1">
-                      {template.questCount} quests
+                      {template.questCount} {messages.management.questsCountSuffix}
                     </span>
                     <span className="rounded-full border border-white/10 px-3 py-1">
-                      {template.coreQuestCount} core
+                      {template.coreQuestCount} {messages.management.coreCountSuffix}
                     </span>
                     <span className="rounded-full border border-white/10 px-3 py-1">
-                      Rule {template.successTarget}
+                      {messages.management.rulePrefix} {template.successTarget}
                     </span>
                   </div>
 
@@ -521,8 +573,8 @@ export function TitanManagementConsole({
                     <form action={setActiveTemplateAction} className="mt-4">
                       <input type="hidden" name="template_id" value={template.id} />
                       <TitanSubmitButton
-                        idleLabel="Activate template"
-                        pendingLabel="Switching template..."
+                        idleLabel={messages.management.activateTemplate}
+                        pendingLabel={messages.management.activatingTemplate}
                         className="neo-button w-full rounded-full px-4 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#fff7de]"
                       />
                     </form>
@@ -532,19 +584,19 @@ export function TitanManagementConsole({
             </div>
           ) : (
             <TitanEmptyPanel
-              kicker="Templates"
-              title="Roster is empty"
-              description="No templates have been forged yet, so the dashboard has no active run to render."
-              hint="Start in Template forge above."
+              kicker={messages.management.templatesKicker}
+              title={messages.management.rosterEmptyTitle}
+              description={messages.management.rosterEmptyDescription}
+              hint={messages.management.rosterEmptyHint}
             />
           )}
         </div>
 
         <div className="panel rounded-[28px] p-4">
           <ForgeHeader
-            kicker="Quests"
-            title="Build queue"
-            caption="Everything created in the forge lands here with its live wiring."
+            kicker={messages.management.questsKicker}
+            title={messages.management.questsTitle}
+            caption={messages.management.questsCaption}
           />
           {hasQuests ? (
             <div className="grid gap-3">
@@ -556,7 +608,7 @@ export function TitanManagementConsole({
                       <h3 className="mt-2 text-base font-semibold text-[#fff7de]">{quest.title}</h3>
                     </div>
                     <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--titan-text)]">
-                      {quest.type}
+                      {formatQuestTypeLabel(locale, quest.type)}
                     </span>
                   </div>
 
@@ -566,10 +618,10 @@ export function TitanManagementConsole({
 
                   <div className="mt-4 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.18em] text-[var(--titan-muted)]">
                     <span className="rounded-full border border-white/10 px-3 py-1">
-                      {quest.progressKind}
+                      {formatProgressKindLabel(locale, quest.progressKind)}
                     </span>
                     <span className="rounded-full border border-white/10 px-3 py-1">
-                      {quest.isCore ? "core" : "side"}
+                      {quest.isCore ? messages.enums.coreLabel : messages.enums.sideLabel}
                     </span>
                     <span className="rounded-full border border-white/10 px-3 py-1">
                       +{quest.xpValue} xp
@@ -582,32 +634,34 @@ export function TitanManagementConsole({
                     ) : null}
                     {quest.progressKind === "counter" ? (
                       <span className="rounded-full border border-white/10 px-3 py-1">
-                        {quest.progressOptionCount} options
+                        {quest.progressOptionCount} {messages.management.optionsSuffix}
                       </span>
                     ) : null}
                   </div>
 
                   <p className="mt-4 text-xs uppercase tracking-[0.18em] text-[var(--titan-muted)]">
-                    {quest.rewardTitle ? `Reward linked // ${quest.rewardTitle}` : "Reward pending"}
+                    {quest.rewardTitle
+                      ? `${messages.management.rewardLinkedPrefix} ${quest.rewardTitle}`
+                      : messages.management.rewardPending}
                   </p>
                 </article>
               ))}
             </div>
           ) : (
             <TitanEmptyPanel
-              kicker="Quests"
-              title="Build queue is empty"
-              description="No quests have been forged yet, so the player loop still has no content."
-              hint="Create at least one Daily Quest to wake the run."
+              kicker={messages.management.questsKicker}
+              title={messages.management.buildQueueEmptyTitle}
+              description={messages.management.buildQueueEmptyDescription}
+              hint={messages.management.buildQueueEmptyHint}
             />
           )}
         </div>
 
         <div className="panel rounded-[28px] p-4">
           <ForgeHeader
-            kicker="Rewards"
-            title="Loot ledger"
-            caption="Track rarity, unlock state, and how many quests are wired to each item."
+            kicker={messages.management.rewardsKicker}
+            title={messages.management.rewardsTitle}
+            caption={messages.management.rewardsCaption}
           />
           {hasRewards ? (
             <div className="grid gap-3">
@@ -621,7 +675,7 @@ export function TitanManagementConsole({
                       </p>
                     </div>
                     <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--titan-text)]">
-                      {reward.rarity}
+                      {formatRewardRarityLabel(locale, reward.rarity)}
                     </span>
                   </div>
 
@@ -630,10 +684,10 @@ export function TitanManagementConsole({
                       {reward.xpCost} xp
                     </span>
                     <span className="rounded-full border border-white/10 px-3 py-1">
-                      {reward.linkedQuestCount} links
+                      {reward.linkedQuestCount} {messages.enums.links}
                     </span>
                     <span className="rounded-full border border-white/10 px-3 py-1">
-                      {reward.unlocked ? "unlocked" : "locked"}
+                      {reward.unlocked ? messages.enums.unlocked : messages.enums.locked}
                     </span>
                   </div>
                 </article>
@@ -641,10 +695,10 @@ export function TitanManagementConsole({
             </div>
           ) : (
             <TitanEmptyPanel
-              kicker="Rewards"
-              title="Loot ledger is empty"
-              description="No rewards have been created yet, so the Shop and reward links still have nothing to surface."
-              hint="Reward forge above is already ready."
+              kicker={messages.management.rewardsKicker}
+              title={messages.management.lootLedgerEmptyTitle}
+              description={messages.management.lootLedgerEmptyDescription}
+              hint={messages.management.lootLedgerEmptyHint}
             />
           )}
         </div>

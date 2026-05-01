@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { buildLocalizedPath, getLocaleFromAbsoluteUrl } from "@/lib/i18n";
 import {
   clearSessionCookie,
   createSessionCookie,
@@ -22,10 +23,10 @@ const SAFE_REDIRECT_PATTERN = /^\/(?!\/)[^\s]*$/;
 function readSafeRedirect(formData: FormData): string {
   const value = formData.get(REDIRECT_FIELD);
   if (typeof value !== "string") {
-    return "/";
+    return buildLocalizedPath(getLocaleFromAbsoluteUrl(null));
   }
   if (value.length > 256 || !SAFE_REDIRECT_PATTERN.test(value)) {
-    return "/";
+    return buildLocalizedPath(getLocaleFromAbsoluteUrl(null));
   }
   return value;
 }
@@ -44,13 +45,15 @@ async function readClientIp(): Promise<string> {
 }
 
 function buildLoginRedirect(
+  locale: ReturnType<typeof getLocaleFromAbsoluteUrl>,
   target: string,
   error: "invalid" | "config" | "throttled",
 ): string {
-  return `/login?error=${error}&redirect=${encodeURIComponent(target)}`;
+  return `${buildLocalizedPath(locale, "/login")}?error=${error}&redirect=${encodeURIComponent(target)}`;
 }
 
 export async function loginAction(formData: FormData): Promise<void> {
+  const locale = getLocaleFromAbsoluteUrl((await headers()).get("referer"));
   const password = formData.get(PASSWORD_FIELD);
   const target = readSafeRedirect(formData);
 
@@ -59,7 +62,7 @@ export async function loginAction(formData: FormData): Promise<void> {
     password.length === 0 ||
     password.length > MAX_PASSWORD_LENGTH
   ) {
-    redirect(buildLoginRedirect(target, "invalid"));
+    redirect(buildLoginRedirect(locale, target, "invalid"));
   }
 
   const ip = await readClientIp();
@@ -69,11 +72,11 @@ export async function loginAction(formData: FormData): Promise<void> {
     limit = await checkLoginRateLimit(ip);
   } catch (error) {
     console.error("[titan-auth:login]", error);
-    redirect(buildLoginRedirect(target, "config"));
+    redirect(buildLoginRedirect(locale, target, "config"));
   }
 
   if (!limit.allowed) {
-    redirect(buildLoginRedirect(target, "throttled"));
+    redirect(buildLoginRedirect(locale, target, "throttled"));
   }
 
   let ok = false;
@@ -81,7 +84,7 @@ export async function loginAction(formData: FormData): Promise<void> {
     ok = await verifyPassword(password as string);
   } catch (error) {
     console.error("[titan-auth:login]", error);
-    redirect(buildLoginRedirect(target, "config"));
+    redirect(buildLoginRedirect(locale, target, "config"));
   }
 
   if (!ok) {
@@ -90,7 +93,7 @@ export async function loginAction(formData: FormData): Promise<void> {
     } catch (error) {
       console.error("[titan-auth:login]", error);
     }
-    redirect(buildLoginRedirect(target, "invalid"));
+    redirect(buildLoginRedirect(locale, target, "invalid"));
   }
 
   try {
@@ -98,13 +101,14 @@ export async function loginAction(formData: FormData): Promise<void> {
     await createSessionCookie();
   } catch (error) {
     console.error("[titan-auth:login]", error);
-    redirect(buildLoginRedirect(target, "config"));
+    redirect(buildLoginRedirect(locale, target, "config"));
   }
 
   redirect(target);
 }
 
 export async function logoutAction(): Promise<void> {
+  const locale = getLocaleFromAbsoluteUrl((await headers()).get("referer"));
   await clearSessionCookie();
-  redirect("/login");
+  redirect(buildLocalizedPath(locale, "/login"));
 }

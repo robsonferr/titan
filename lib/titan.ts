@@ -1,3 +1,5 @@
+import { getMessages, type Locale } from "@/lib/i18n";
+
 export type QuestType = "daily" | "weekly" | "monthly" | "epic";
 export type QuestProgressKind = "boolean" | "counter";
 export type RewardRarity = "common" | "rare" | "legendary";
@@ -152,14 +154,17 @@ export function isSuccessfulDay(
 }
 
 export function getSuccessRuleLabel(
+  locale: Locale,
   successTarget: number,
   totalCoreQuests: number,
 ): string {
+  const messages = getMessages(locale);
+
   if (totalCoreQuests === 0) {
-    return "Set core quests to define the daily clear rule.";
+    return messages.domain.noCoreQuestRule;
   }
 
-  return `${successTarget} of ${totalCoreQuests} core quests clear the day.`;
+  return messages.domain.clearDayRule(successTarget, totalCoreQuests);
 }
 
 export function getQuestCompletion(
@@ -175,16 +180,18 @@ export function getQuestCompletion(
   return completedFlag;
 }
 
-export function getBossMood(score: number, threshold: number): string {
+export function getBossMood(locale: Locale, score: number, threshold: number): string {
+  const messages = getMessages(locale);
+
   if (score >= threshold + 0.12) {
-    return "Boss cracked";
+    return messages.domain.bossCracked;
   }
 
   if (score >= threshold) {
-    return "On the shield";
+    return messages.domain.onShield;
   }
 
-  return "Danger zone";
+  return messages.domain.dangerZone;
 }
 
 export interface AppSettingRecord {

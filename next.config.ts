@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 
 void initOpenNextCloudflareForDev();
 
+const isDev = process.env.NODE_ENV !== "production";
+
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -12,7 +14,7 @@ const CONTENT_SECURITY_POLICY = [
   "img-src 'self' data:",
   "font-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "connect-src 'self'",
 ].join("; ");
 

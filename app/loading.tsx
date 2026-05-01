@@ -1,13 +1,19 @@
-import { TitanShellCard } from "@/app/_components/titan-shell-card";
+import { headers } from "next/headers";
 
-export default function Loading(): React.JSX.Element {
+import { TitanShellCard } from "@/app/_components/titan-shell-card";
+import { getMessages, LOCALE_HEADER, resolveLocale } from "@/lib/i18n";
+
+export default async function Loading(): Promise<React.JSX.Element> {
+  const locale = resolveLocale((await headers()).get(LOCALE_HEADER));
+  const messages = getMessages(locale);
+
   return (
     <main className="safe-bottom relative mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 px-4 py-6 sm:max-w-2xl sm:px-6 lg:max-w-6xl">
       <TitanShellCard
-        kicker="Phase 5 // Loading"
-        title="Booting TITAN"
-        description="Syncing the active template, Boss state, and forge deck."
-        badge="Loading"
+        kicker={messages.loading.kicker}
+        title={messages.loading.title}
+        description={messages.loading.description}
+        badge={messages.loading.badge}
       >
         <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="panel rounded-[28px] p-5">

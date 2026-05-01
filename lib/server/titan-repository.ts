@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 
+import { getMessages, type Locale } from "@/lib/i18n";
 import {
   DEFAULT_BOSS_THRESHOLD,
   type AppSettingRecord,
@@ -80,10 +81,10 @@ function toBoolean(value: number): boolean {
   return value === 1;
 }
 
-function formatTodayLabel(date: string): string {
+function formatTodayLabel(date: string, locale: Locale): string {
   const parsedDate = new Date(`${date}T00:00:00Z`);
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale, {
     weekday: "long",
     day: "2-digit",
     month: "short",
@@ -105,6 +106,7 @@ function getSettingMap(records: AppSettingRecord[]): Record<string, string> {
 }
 
 function mapTemplate(
+  locale: Locale,
   record: TemplateRecord,
   totalCoreQuests: number,
 ): Template {
@@ -113,11 +115,16 @@ function mapTemplate(
     title: record.title,
     summary: record.summary,
     successTarget: record.success_target,
-    successRuleLabel: getSuccessRuleLabel(record.success_target, totalCoreQuests),
+    successRuleLabel: getSuccessRuleLabel(
+      locale,
+      record.success_target,
+      totalCoreQuests,
+    ),
   };
 }
 
 function mapTemplateSummary(
+  locale: Locale,
   record: TemplateSummaryRow,
   activeTemplateId: string,
 ): TemplateSummary {
@@ -127,6 +134,7 @@ function mapTemplateSummary(
     summary: record.summary,
     successTarget: record.success_target,
     successRuleLabel: getSuccessRuleLabel(
+      locale,
       record.success_target,
       record.core_quest_count,
     ),
@@ -136,10 +144,12 @@ function mapTemplateSummary(
   };
 }
 
-function mapReward(record: RewardRecord): Reward {
+function mapReward(locale: Locale, record: RewardRecord): Reward {
+  const messages = getMessages(locale);
+
   return {
     id: record.id,
-    title: `Loot // ${record.title}`,
+    title: `${messages.domain.lootPrefix} ${record.title}`,
     description: record.description,
     rarity: record.rarity,
     xpCost: record.xp_cost,
@@ -179,6 +189,7 @@ function mapQuestSummary(record: QuestSummaryRow): QuestSummary {
 }
 
 function buildQuestProgressLabel(quest: {
+  locale: Locale;
   progressKind: Quest["progressKind"];
   currentValue: number;
   targetValue: number | null;
@@ -186,16 +197,20 @@ function buildQuestProgressLabel(quest: {
   completed: boolean;
   type: QuestType;
 }): string {
+  const messages = getMessages(quest.locale);
+
   if (quest.progressKind === "counter" && quest.targetValue !== null) {
     const unitSuffix = quest.unit ? ` ${quest.unit}` : "";
     return `${quest.currentValue} / ${quest.targetValue}${unitSuffix}`;
   }
 
   if (quest.completed) {
-    return "Cleared";
+    return messages.domain.questCleared;
   }
 
-  return quest.type === "daily" ? "Ready" : "Charging";
+  return quest.type === "daily"
+    ? messages.domain.questReady
+    : messages.domain.questCharging;
 }
 
 function splitQuestsByType(quests: Quest[]): Record<QuestType, Quest[]> {
@@ -230,10 +245,12 @@ function buildOptionUseMap(records: DailyOptionUseRecord[]): Map<string, number>
 }
 
 function deriveQuest(
+  locale: Locale,
   record: QuestRecord,
   dailyEntriesByQuestId: Map<string, DailyLogEntryRecord>,
   progressByQuestId: Map<string, QuestProgressRecord>,
 ): Quest {
+  const messages = getMessages(locale);
   const dailyEntry = dailyEntriesByQuestId.get(record.id);
   const progressRecord = progressByQuestId.get(record.id);
   const currentValue =
@@ -257,6 +274,7 @@ function deriveQuest(
     summary: record.summary,
     cadenceLabel: record.cadence_label,
     progressLabel: buildQuestProgressLabel({
+      locale,
       progressKind: record.progress_kind,
       currentValue,
       targetValue: record.target_value,
@@ -265,7 +283,7 @@ function deriveQuest(
       type: record.type,
     }),
     rewardLabel: record.reward_title
-      ? `Reward: ${record.reward_title}`
+      ? `${messages.domain.rewardPrefix} ${record.reward_title}`
       : record.reward_label,
     xpValue: record.xp_value,
     completed,
@@ -426,254 +444,263 @@ async function queryQuestRecords(
   );
 }
 
-export const getTitanAppState = cache(async (): Promise<TitanAppState> => {
-  let database: TitanDatabase;
+export const getTitanAppState = cache(
+  async (locale: Locale): Promise<TitanAppState> => {
+    let database: TitanDatabase;
 
-  try {
-    database = await getTitanDatabase();
-  } catch (error) {
-    if (isMissingTitanBindingError(error)) {
+    try {
+      database = await getTitanDatabase();
+    } catch (error) {
+      if (isMissingTitanBindingError(error)) {
+        return {
+          kind: "missing_binding",
+          bindingName: TITAN_D1_BINDING,
+          configLocation: "wrangler.jsonc -> d1_databases[].binding",
+        };
+      }
+
+      throw error;
+    }
+
+    let settingsRows: AppSettingRecord[];
+    let templateRecords: TemplateRecord[];
+
+    try {
+      [settingsRows, templateRecords] = await Promise.all([
+        queryAll<AppSettingRecord>(
+          "SELECT key, value FROM app_settings ORDER BY key",
+          [],
+          database,
+        ),
+        queryAll<TemplateRecord>(
+          `
+            SELECT id, title, summary, success_target, display_order
+            FROM templates
+            ORDER BY display_order ASC
+          `,
+          [],
+          database,
+        ),
+      ]);
+    } catch (error) {
+      if (isMissingTitanSchemaError(error)) {
+        return {
+          kind: "missing_schema",
+          bindingName: TITAN_D1_BINDING,
+        };
+      }
+
+      throw error;
+    }
+
+    const settings = getSettingMap(settingsRows);
+    const bossThreshold = Number(settings.boss_threshold ?? DEFAULT_BOSS_THRESHOLD);
+    const messages = getMessages(locale);
+    const playerName =
+      settings.player_name ??
+      settings.pilot_name ??
+      settings.player_label ??
+      messages.domain.defaultPlayerName;
+
+    if (templateRecords.length === 0) {
       return {
-        kind: "missing_binding",
+        kind: "empty_database",
         bindingName: TITAN_D1_BINDING,
-        configLocation: "wrangler.jsonc -> d1_databases[].binding",
       };
     }
 
-    throw error;
-  }
-
-  let settingsRows: AppSettingRecord[];
-  let templateRecords: TemplateRecord[];
-
-  try {
-    [settingsRows, templateRecords] = await Promise.all([
-      queryAll<AppSettingRecord>(
-        "SELECT key, value FROM app_settings ORDER BY key",
-        [],
+    const activeTemplateRecord =
+      templateRecords.find((record) => record.id === settings.active_template_id) ??
+      templateRecords[0];
+    const questRecords = await queryQuestRecords(database, activeTemplateRecord.id);
+    const totalCoreQuests = questRecords.filter(
+      (record) => record.type === "daily" && toBoolean(record.is_core),
+    ).length;
+    const activeTemplate = mapTemplate(locale, activeTemplateRecord, totalCoreQuests);
+    const activeDate = getTodayIsoDate();
+    const currentMonth = activeDate.slice(0, 7);
+    const [
+      monthlyStatsRow,
+      latestDailyEntries,
+      questProgressRecords,
+      progressOptionRecords,
+      dailyOptionUseRecords,
+      rewardRecords,
+      recentDailyLogs,
+      recentDailyEntries,
+    ] = await Promise.all([
+      queryFirst<MonthlyStatsRecord>(
+        `
+          SELECT month, template_id, engagement_score, successful_days, total_days, threshold
+          FROM monthly_stats
+          WHERE month = ? AND template_id = ?
+        `,
+        [currentMonth, activeTemplate.id],
         database,
       ),
-      queryAll<TemplateRecord>(
+      queryAll<DailyLogEntryRecord>(
         `
-          SELECT id, title, summary, success_target, display_order
-          FROM templates
+          SELECT e.date, e.template_id, e.quest_id, e.completed, e.value
+          FROM daily_log_entries e
+          INNER JOIN quests q ON q.id = e.quest_id
+          WHERE e.date = ? AND e.template_id = ? AND q.template_id = ?
+        `,
+        [activeDate, activeTemplate.id, activeTemplate.id],
+        database,
+      ),
+      queryAll<QuestProgressRecord>(
+        `
+          SELECT qp.quest_id, qp.current_value, qp.completed
+          FROM quest_progress qp
+          INNER JOIN quests q ON q.id = qp.quest_id
+          WHERE q.template_id = ?
+        `,
+        [activeTemplate.id],
+        database,
+      ),
+      queryAll<QuestProgressOptionRecord>(
+        `
+          SELECT qpo.id, qpo.quest_id, qpo.label, qpo.value, qpo.display_order
+          FROM quest_progress_options qpo
+          INNER JOIN quests q ON q.id = qpo.quest_id
+          WHERE q.template_id = ?
+          ORDER BY qpo.display_order ASC
+        `,
+        [activeTemplate.id],
+        database,
+      ),
+      queryAll<DailyOptionUseRecord>(
+        `
+          SELECT dou.date, dou.template_id, dou.option_id, dou.uses_count
+          FROM daily_option_uses dou
+          INNER JOIN quest_progress_options qpo ON qpo.id = dou.option_id
+          INNER JOIN quests q ON q.id = qpo.quest_id
+          WHERE dou.date = ? AND dou.template_id = ? AND q.template_id = ?
+        `,
+        [activeDate, activeTemplate.id, activeTemplate.id],
+        database,
+      ),
+      queryAll<RewardRecord>(
+        `
+          SELECT id, title, description, rarity, xp_cost, unlocked, display_order
+          FROM rewards
           ORDER BY display_order ASC
         `,
         [],
         database,
       ),
-    ]);
-  } catch (error) {
-    if (isMissingTitanSchemaError(error)) {
-      return {
-        kind: "missing_schema",
-        bindingName: TITAN_D1_BINDING,
-      };
-    }
-
-    throw error;
-  }
-
-  const settings = getSettingMap(settingsRows);
-  const bossThreshold = Number(settings.boss_threshold ?? DEFAULT_BOSS_THRESHOLD);
-  const playerName =
-    settings.player_name ?? settings.pilot_name ?? settings.player_label ?? "Pilot";
-
-  if (templateRecords.length === 0) {
-    return {
-      kind: "empty_database",
-      bindingName: TITAN_D1_BINDING,
-    };
-  }
-
-  const activeTemplateRecord =
-    templateRecords.find((record) => record.id === settings.active_template_id) ??
-    templateRecords[0];
-  const questRecords = await queryQuestRecords(database, activeTemplateRecord.id);
-  const totalCoreQuests = questRecords.filter(
-    (record) => record.type === "daily" && toBoolean(record.is_core),
-  ).length;
-  const activeTemplate = mapTemplate(activeTemplateRecord, totalCoreQuests);
-  const activeDate = getTodayIsoDate();
-  const currentMonth = activeDate.slice(0, 7);
-  const [
-    monthlyStatsRow,
-    latestDailyEntries,
-    questProgressRecords,
-    progressOptionRecords,
-    dailyOptionUseRecords,
-    rewardRecords,
-    recentDailyLogs,
-    recentDailyEntries,
-  ] = await Promise.all([
-    queryFirst<MonthlyStatsRecord>(
-      `
-        SELECT month, template_id, engagement_score, successful_days, total_days, threshold
-        FROM monthly_stats
-        WHERE month = ? AND template_id = ?
-      `,
-      [currentMonth, activeTemplate.id],
-      database,
-    ),
-    queryAll<DailyLogEntryRecord>(
-      `
-        SELECT e.date, e.template_id, e.quest_id, e.completed, e.value
-        FROM daily_log_entries e
-        INNER JOIN quests q ON q.id = e.quest_id
-        WHERE e.date = ? AND e.template_id = ? AND q.template_id = ?
-      `,
-      [activeDate, activeTemplate.id, activeTemplate.id],
-      database,
-    ),
-    queryAll<QuestProgressRecord>(
-      `
-        SELECT qp.quest_id, qp.current_value, qp.completed
-        FROM quest_progress qp
-        INNER JOIN quests q ON q.id = qp.quest_id
-        WHERE q.template_id = ?
-      `,
-      [activeTemplate.id],
-      database,
-    ),
-    queryAll<QuestProgressOptionRecord>(
-      `
-        SELECT qpo.id, qpo.quest_id, qpo.label, qpo.value, qpo.display_order
-        FROM quest_progress_options qpo
-        INNER JOIN quests q ON q.id = qpo.quest_id
-        WHERE q.template_id = ?
-        ORDER BY qpo.display_order ASC
-      `,
-      [activeTemplate.id],
-      database,
-    ),
-    queryAll<DailyOptionUseRecord>(
-      `
-        SELECT dou.date, dou.template_id, dou.option_id, dou.uses_count
-        FROM daily_option_uses dou
-        INNER JOIN quest_progress_options qpo ON qpo.id = dou.option_id
-        INNER JOIN quests q ON q.id = qpo.quest_id
-        WHERE dou.date = ? AND dou.template_id = ? AND q.template_id = ?
-      `,
-      [activeDate, activeTemplate.id, activeTemplate.id],
-      database,
-    ),
-    queryAll<RewardRecord>(
-      `
-        SELECT id, title, description, rarity, xp_cost, unlocked, display_order
-        FROM rewards
-        ORDER BY display_order ASC
-      `,
-      [],
-      database,
-    ),
-    queryAll<DailyLogRecord>(
-      `
-        SELECT date, template_id
-        FROM daily_logs
-        WHERE template_id = ?
-        ORDER BY date DESC
-        LIMIT 31
-      `,
-      [activeTemplate.id],
-      database,
-    ),
-    queryAll<DailyLogEntryRecord>(
-      `
-        SELECT e.date, e.template_id, e.quest_id, e.completed, e.value
-        FROM daily_log_entries e
-        INNER JOIN quests q ON q.id = e.quest_id
-        INNER JOIN (
+      queryAll<DailyLogRecord>(
+        `
           SELECT date, template_id
           FROM daily_logs
           WHERE template_id = ?
           ORDER BY date DESC
           LIMIT 31
-        ) recent ON recent.date = e.date AND recent.template_id = e.template_id
-        WHERE e.template_id = ? AND q.template_id = ?
-      `,
-      [activeTemplate.id, activeTemplate.id, activeTemplate.id],
-      database,
-    ),
-  ]);
-  const monthlyStatsRecord = monthlyStatsRow ?? {
-    month: currentMonth,
-    template_id: activeTemplate.id,
-    engagement_score: 0,
-    successful_days: 0,
-    total_days: 0,
-    threshold: bossThreshold,
-  };
-  const rewards = rewardRecords.map(mapReward);
+        `,
+        [activeTemplate.id],
+        database,
+      ),
+      queryAll<DailyLogEntryRecord>(
+        `
+          SELECT e.date, e.template_id, e.quest_id, e.completed, e.value
+          FROM daily_log_entries e
+          INNER JOIN quests q ON q.id = e.quest_id
+          INNER JOIN (
+            SELECT date, template_id
+            FROM daily_logs
+            WHERE template_id = ?
+            ORDER BY date DESC
+            LIMIT 31
+          ) recent ON recent.date = e.date AND recent.template_id = e.template_id
+          WHERE e.template_id = ? AND q.template_id = ?
+        `,
+        [activeTemplate.id, activeTemplate.id, activeTemplate.id],
+        database,
+      ),
+    ]);
+    const monthlyStatsRecord = monthlyStatsRow ?? {
+      month: currentMonth,
+      template_id: activeTemplate.id,
+      engagement_score: 0,
+      successful_days: 0,
+      total_days: 0,
+      threshold: bossThreshold,
+    };
+    const rewards = rewardRecords.map((record) => mapReward(locale, record));
 
-  const dailyEntriesByQuestId = buildDailyEntryMap(latestDailyEntries);
-  const progressByQuestId = buildProgressMap(questProgressRecords);
-  const optionUsesById = buildOptionUseMap(dailyOptionUseRecords);
-  const quests = questRecords.map((record) =>
-    deriveQuest(record, dailyEntriesByQuestId, progressByQuestId),
-  );
-  const questsByType = splitQuestsByType(quests);
-  const dailyLog = computeDailyLog(
-    activeDate,
-    activeTemplate.id,
-    questsByType.daily,
-    activeTemplate.successTarget,
-  );
-  const streakDays = computeStreakDays(
-    recentDailyLogs,
-    questRecords.filter((record) => record.type === "daily" && toBoolean(record.is_core)),
-    recentDailyEntries,
-    activeTemplate.successTarget,
-  );
-  const featuredGoal = buildFeaturedGoal(
-    questsByType.daily,
-    progressOptionRecords,
-    optionUsesById,
-  );
-  const bossMood = getBossMood(
-    monthlyStatsRecord.engagement_score,
-    monthlyStatsRecord.threshold,
-  );
-  const monthlyQuests = questsByType.monthly.map((quest) =>
-    quest.id === "monthly-boss"
-      ? {
-          ...quest,
-          title: `Monthly Boss // ${bossMood}`,
-        }
-      : quest,
-  );
+    const dailyEntriesByQuestId = buildDailyEntryMap(latestDailyEntries);
+    const progressByQuestId = buildProgressMap(questProgressRecords);
+    const optionUsesById = buildOptionUseMap(dailyOptionUseRecords);
+    const quests = questRecords.map((record) =>
+      deriveQuest(locale, record, dailyEntriesByQuestId, progressByQuestId),
+    );
+    const questsByType = splitQuestsByType(quests);
+    const dailyLog = computeDailyLog(
+      activeDate,
+      activeTemplate.id,
+      questsByType.daily,
+      activeTemplate.successTarget,
+    );
+    const streakDays = computeStreakDays(
+      recentDailyLogs,
+      questRecords.filter(
+        (record) => record.type === "daily" && toBoolean(record.is_core),
+      ),
+      recentDailyEntries,
+      activeTemplate.successTarget,
+    );
+    const featuredGoal = buildFeaturedGoal(
+      questsByType.daily,
+      progressOptionRecords,
+      optionUsesById,
+    );
+    const bossMood = getBossMood(
+      locale,
+      monthlyStatsRecord.engagement_score,
+      monthlyStatsRecord.threshold,
+    );
+    const monthlyQuests = questsByType.monthly.map((quest) =>
+      quest.id === "monthly-boss"
+        ? {
+            ...quest,
+            title: `${messages.domain.monthlyBossPrefix} ${bossMood}`,
+          }
+        : quest,
+    );
 
-  return {
-    kind: "ready",
-    snapshot: {
-      playerName,
-      todayLabel: formatTodayLabel(activeDate),
-      streakDays,
-      activeTemplate,
-      dailyLog,
-      monthlyStats: {
-        month: monthlyStatsRecord.month,
-        engagement_score: monthlyStatsRecord.engagement_score,
+    return {
+      kind: "ready",
+      snapshot: {
+        playerName,
+        todayLabel: formatTodayLabel(activeDate, locale),
+        streakDays,
+        activeTemplate,
+        dailyLog,
+        monthlyStats: {
+          month: monthlyStatsRecord.month,
+          engagement_score: monthlyStatsRecord.engagement_score,
+        },
+        featuredGoal,
+        dailyQuests: questsByType.daily,
+        weeklyQuests: questsByType.weekly,
+        monthlyQuests,
+        epicQuests: questsByType.epic,
+        rewards,
+        monthlyBoss: {
+          month: monthlyStatsRecord.month,
+          engagementScore: monthlyStatsRecord.engagement_score,
+          threshold: monthlyStatsRecord.threshold,
+          completedDays: monthlyStatsRecord.successful_days,
+          totalDays: monthlyStatsRecord.total_days,
+          successRuleLabel: activeTemplate.successRuleLabel,
+        },
       },
-      featuredGoal,
-      dailyQuests: questsByType.daily,
-      weeklyQuests: questsByType.weekly,
-      monthlyQuests,
-      epicQuests: questsByType.epic,
-      rewards,
-      monthlyBoss: {
-        month: monthlyStatsRecord.month,
-        engagementScore: monthlyStatsRecord.engagement_score,
-        threshold: monthlyStatsRecord.threshold,
-        completedDays: monthlyStatsRecord.successful_days,
-        totalDays: monthlyStatsRecord.total_days,
-        successRuleLabel: activeTemplate.successRuleLabel,
-      },
-    },
-  };
-});
+    };
+  },
+);
 
 export const getTitanManagementSnapshot = cache(
-  async (): Promise<ManagementSnapshot> => {
+  async (locale: Locale): Promise<ManagementSnapshot> => {
     const database = await getTitanDatabase();
     const [settingsRows, templateRows, questRows, rewardRows] = await Promise.all([
       queryAll<AppSettingRecord>(
@@ -773,7 +800,9 @@ export const getTitanManagementSnapshot = cache(
 
     return {
       activeTemplateId,
-      templates: templateRows.map((row) => mapTemplateSummary(row, activeTemplateId)),
+      templates: templateRows.map((row) =>
+        mapTemplateSummary(locale, row, activeTemplateId),
+      ),
       quests: questRows.map(mapQuestSummary),
       rewards: rewardRows.map(mapRewardSummary),
     };

@@ -2,7 +2,10 @@
 
 import { motion } from "framer-motion";
 
+import { getMessages, type Locale } from "@/lib/i18n";
+
 interface MonthlyBossWidgetProps {
+  locale: Locale;
   month: string;
   engagementScore: number;
   threshold: number;
@@ -12,6 +15,7 @@ interface MonthlyBossWidgetProps {
 }
 
 export function MonthlyBossWidget({
+  locale,
   month,
   engagementScore,
   threshold,
@@ -19,14 +23,15 @@ export function MonthlyBossWidget({
   totalDays,
   successRuleLabel,
 }: MonthlyBossWidgetProps): React.JSX.Element {
+  const messages = getMessages(locale);
   const percentage = Math.round(engagementScore * 100);
   const thresholdPercent = Math.round(threshold * 100);
   const hasTrackedDays = totalDays > 0;
   const bossStatusLabel = !hasTrackedDays
-    ? "Month booting"
+    ? messages.monthlyBoss.monthBooting
     : percentage >= thresholdPercent
-      ? "Shield up"
-      : "Recovering";
+      ? messages.monthlyBoss.shieldUp
+      : messages.monthlyBoss.recovering;
   const ringStyle = {
     background: `conic-gradient(#ee4266 ${percentage}%, rgba(255,255,255,0.08) ${percentage}% 100%)`,
   };
@@ -35,9 +40,9 @@ export function MonthlyBossWidget({
     <div className="panel rounded-[32px] p-5">
       <div className="mb-5 flex items-center justify-between gap-3">
         <div>
-          <p className="section-kicker">Monthly Boss</p>
+          <p className="section-kicker">{messages.monthlyBoss.kicker}</p>
           <h3 className="mt-2 text-xl font-semibold text-[#fff7de]">
-            Consistency shield
+            {messages.monthlyBoss.title}
           </h3>
         </div>
         <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--titan-muted)]">
@@ -58,7 +63,7 @@ export function MonthlyBossWidget({
               {percentage}
             </span>
             <span className="-mt-1 text-[10px] font-semibold uppercase tracking-[0.26em] text-[var(--titan-muted)]">
-              Percent
+              {messages.monthlyBoss.percent}
             </span>
           </div>
         </motion.div>
@@ -67,17 +72,17 @@ export function MonthlyBossWidget({
           {hasTrackedDays ? (
             <p>
               <span className="font-semibold text-[#fff7de]">{completedDays}</span>{" "}
-              successful days out of{" "}
+              {messages.monthlyBoss.successfulDaysPrefix}{" "}
               <span className="font-semibold text-[#fff7de]">{totalDays}</span>.
             </p>
           ) : (
-            <p>No cleared days yet. Finish a valid day to wake the Boss meter.</p>
+            <p>{messages.monthlyBoss.noClearedDays}</p>
           )}
           <p>{successRuleLabel}</p>
           <p>
-            Threshold is{" "}
+            {messages.monthlyBoss.thresholdPrefix}{" "}
             <span className="font-semibold text-[#fff7de]">{thresholdPercent}%</span>{" "}
-            to clear this Boss.
+            {messages.monthlyBoss.thresholdSuffix}
           </p>
           <div
             className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${

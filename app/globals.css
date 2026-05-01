@@ -3,8 +3,8 @@
 :root {
   --titan-bg: #230c0f;
   --titan-bg-deep: #16060a;
-  --titan-panel: rgba(54, 21, 32, 0.82);
-  --titan-panel-strong: rgba(75, 28, 40, 0.94);
+  --titan-panel: #34141d;
+  --titan-panel-strong: #4b1c28;
   --titan-primary: #1b4965;
   --titan-primary-soft: rgba(27, 73, 101, 0.28);
   --titan-action: #ee4266;
@@ -81,22 +81,10 @@ button {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--titan-line);
-  background: linear-gradient(180deg, rgba(93, 36, 50, 0.28), rgba(24, 11, 14, 0.8));
+  background: linear-gradient(180deg, var(--titan-panel-strong), var(--titan-panel));
   box-shadow:
     0 22px 60px rgba(0, 0, 0, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(18px);
-}
-
-.panel::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 30%),
-    linear-gradient(315deg, rgba(27, 73, 101, 0.18), transparent 42%);
 }
 
 .section-kicker {

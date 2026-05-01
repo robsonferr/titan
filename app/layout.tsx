@@ -1,5 +1,8 @@
-import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Bungee, Saira } from "next/font/google";
+
+import { LOCALE_HEADER, resolveLocale } from "@/lib/i18n";
+
 import "./globals.css";
 
 const bungee = Bungee({
@@ -14,20 +17,17 @@ const saira = Saira({
   weight: ["400", "500", "600", "700"],
 });
 
-export const metadata: Metadata = {
-  title: "TITAN // Teen Goals Level Up",
-  description:
-    "Mobile-first quest dashboard for gamified teen goals, daily streaks, monthly bosses, and rewards.",
-};
-
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>) {
+}>): Promise<React.JSX.Element> {
+  const headerStore = await headers();
+  const locale = resolveLocale(headerStore.get(LOCALE_HEADER));
+
   return (
     <html
-      lang="pt-BR"
+      lang={locale}
       className={`${bungee.variable} ${saira.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

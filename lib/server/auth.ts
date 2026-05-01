@@ -11,6 +11,7 @@ import {
   verifySessionToken,
   type SessionPayload,
 } from "@/lib/auth-token";
+import { getDevAuthSession, isDevAuthBypassEnabled } from "@/lib/dev-auth";
 
 interface AuthEnv {
   AUTH_PASSWORD?: string;
@@ -35,6 +36,10 @@ async function getAuthEnv(): Promise<AuthEnv> {
 }
 
 export async function verifyPassword(input: string): Promise<boolean> {
+  if (isDevAuthBypassEnabled()) {
+    return input.length > 0;
+  }
+
   const env = await getAuthEnv();
 
   if (!env.AUTH_PASSWORD) {
@@ -57,6 +62,10 @@ export async function verifyPassword(input: string): Promise<boolean> {
 }
 
 export async function createSessionCookie(): Promise<void> {
+  if (isDevAuthBypassEnabled()) {
+    return;
+  }
+
   const env = await getAuthEnv();
 
   if (!env.AUTH_SESSION_SECRET) {
@@ -81,16 +90,23 @@ export async function createSessionCookie(): Promise<void> {
 
 export async function clearSessionCookie(): Promise<void> {
   const store = await cookies();
+
+  store.delete(SESSION_COOKIE_NAME);
   store.set(SESSION_COOKIE_NAME, "", {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
     path: "/",
     maxAge: 0,
+    expires: new Date(0),
   });
 }
 
 export async function getAuthSession(): Promise<SessionPayload | null> {
+  if (isDevAuthBypassEnabled()) {
+    return getDevAuthSession();
+  }
+
   const env = await getAuthEnv();
 
   if (!env.AUTH_SESSION_SECRET) {

@@ -2,7 +2,10 @@
 
 import { motion } from "framer-motion";
 
+import { getMessages, type Locale } from "@/lib/i18n";
+
 interface TitanProgressBarProps {
+  locale: Locale;
   kicker: string;
   title: string;
   caption: string;
@@ -12,6 +15,7 @@ interface TitanProgressBarProps {
 }
 
 export function TitanProgressBar({
+  locale,
   kicker,
   title,
   caption,
@@ -19,6 +23,7 @@ export function TitanProgressBar({
   goal,
   unit,
 }: TitanProgressBarProps): React.JSX.Element {
+  const messages = getMessages(locale);
   const clamped = goal > 0 ? Math.min(current / goal, 1) : 0;
   const percentage = Math.round(clamped * 100);
 
@@ -30,7 +35,8 @@ export function TitanProgressBar({
           <h3 className="mt-2 text-xl font-semibold text-[#fff7de]">{title}</h3>
         </div>
         <span className="action-chip rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em]">
-          {percentage}% online
+          {percentage}
+          {messages.progressBar.onlineSuffix}
         </span>
       </div>
 
@@ -52,10 +58,12 @@ export function TitanProgressBar({
             {current}
             {unit}
           </p>
-          <p className="text-sm text-[var(--titan-muted)]">Progress loaded today</p>
+          <p className="text-sm text-[var(--titan-muted)]">
+            {messages.progressBar.progressLoadedToday}
+          </p>
         </div>
         <p className="text-right text-sm font-semibold uppercase tracking-[0.2em] text-[#fff7de]">
-          Goal {goal}
+          {messages.progressBar.goalPrefix} {goal}
           {unit}
         </p>
       </div>
